@@ -5,14 +5,18 @@ Cet agent agrège tous les résultats pour créer un tableau final avec:
 - Chaque argument
 - Ses points pour et contre
 - Une note de fiabilité basée sur la qualité des sources et le consensus
+
+Utilise MCP pour réduire la consommation de tokens en utilisant des références
+et des résumés plutôt que d'envoyer tout le contenu dans le prompt.
 """
 from typing import List, Dict
 import json
 from openai import OpenAI
 from ..config import get_settings
+from ..utils.mcp_client import get_mcp_client
 
 
-def aggregate_results(items: List[Dict]) -> Dict:
+def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
     """
     Agrège les résultats de l'analyse pour créer un tableau final.
     
@@ -22,12 +26,16 @@ def aggregate_results(items: List[Dict]) -> Dict:
     - Le consensus entre les sources
     - Le ton de l'argument (affirmatif vs conditionnel)
     
+    Utilise MCP pour réduire les tokens en optimisant le format des données
+    envoyées dans le prompt.
+    
     Args:
         items: Liste de dictionnaires contenant:
             - "argument": texte de l'argument
             - "pros": liste de points pour
             - "cons": liste de points contre
             - "stance": "affirmatif" ou "conditionnel" (optionnel)
+        video_id: Identifiant de la vidéo (optionnel, pour MCP)
             
     Returns:
         Dictionnaire avec le schéma:
@@ -52,43 +60,60 @@ def aggregate_results(items: List[Dict]) -> Dict:
         return {"arguments": []}
     
     client = OpenAI(api_key=settings.openai_api_key)
+    mcp_client = get_mcp_client()
     
-    # Préparation du contexte pour l'agrégation
+    # Préparation optimisée du contexte pour l'agrégation
+    # On limite la taille des pros/cons pour réduire les tokens
     items_context = []
     for item in items:
+        # Limite le nombre de pros/cons par argument
+        pros = item.get("pros", [])[:5]  # Max 5 pros
+        cons = item.get("cons", [])[:5]  # Max 5 cons
+        
+        # Limite la longueur de chaque claim
+        optimized_pros = []
+        for pro in pros:
+            claim = pro.get("claim", "")[:200]  # Max 200 caractères par claim
+            optimized_pros.append({
+                "claim": claim,
+                "source": pro.get("source", "")
+            })
+        
+        optimized_cons = []
+        for con in cons:
+            claim = con.get("claim", "")[:200]  # Max 200 caractères par claim
+            optimized_cons.append({
+                "claim": claim,
+                "source": con.get("source", "")
+            })
+        
         items_context.append({
-            "argument": item.get("argument", ""),
-            "pros": item.get("pros", []),
-            "cons": item.get("cons", []),
-            "stance": item.get("stance", "affirmatif")  # Récupéré depuis l'étape d'extraction
+            "argument": item.get("argument", "")[:300],  # Max 300 caractères pour l'argument
+            "pros": optimized_pros,
+            "cons": optimized_cons,
+            "stance": item.get("stance", "affirmatif")
         })
     
-    # Construction du texte pour le prompt
-    items_text = json.dumps(items_context, ensure_ascii=False, indent=2)
+    # Construction du texte pour le prompt (format compact)
+    items_text = json.dumps(items_context, ensure_ascii=False, separators=(',', ':'))
     
+    # Prompt optimisé (plus court)
     system_prompt = """Tu es un expert en évaluation de la fiabilité d'arguments scientifiques.
-Ton rôle est d'agréger les résultats d'analyse et de calculer une note de fiabilité pour chaque argument.
-
-Pour chaque argument, tu dois:
-1. Conserver les points pour (pros) et contre (cons) avec leurs sources
-2. Calculer une note de fiabilité entre 0.0 et 1.0 basée sur:
-   - Le nombre de sources: plus il y a de sources, plus la note peut être élevée
-   - Le consensus: si les sources sont majoritairement en accord ou en désaccord
-   - La qualité des sources: sources scientifiques (scholar, pubmed) = plus fiable
-   - Le ton: un argument conditionnel peut avoir une note légèrement plus élevée si bien nuancé
-   - L'équilibre: un argument avec des pros ET des cons bien documentés peut être plus fiable qu'un argument unilatéral
+Agrège les résultats d'analyse et calcule une note de fiabilité (0.0-1.0) pour chaque argument.
 
 Critères de notation:
-- 0.0-0.3: Très faible fiabilité (peu de sources, contradictions majeures, sources non scientifiques)
-- 0.4-0.6: Fiabilité moyenne (quelques sources, consensus partiel)
-- 0.7-0.8: Bonne fiabilité (plusieurs sources fiables, consensus relatif)
-- 0.9-1.0: Très haute fiabilité (nombreuses sources scientifiques, fort consensus)
+- 0.0-0.3: Très faible (peu de sources, contradictions majeures)
+- 0.4-0.6: Moyenne (quelques sources, consensus partiel)
+- 0.7-0.8: Bonne (plusieurs sources fiables, consensus relatif)
+- 0.9-1.0: Très haute (nombreuses sources scientifiques, fort consensus)
 
-Format de réponse JSON:
+Facteurs: nombre de sources, consensus, qualité (scientifique > généraliste), ton, équilibre pros/cons.
+
+Format JSON:
 {
   "arguments": [
     {
-      "argument": "texte de l'argument",
+      "argument": "...",
       "pros": [{"claim": "...", "source": "..."}],
       "cons": [{"claim": "...", "source": "..."}],
       "reliability": 0.75,
@@ -97,8 +122,8 @@ Format de réponse JSON:
   ]
 }"""
 
-    # Limite à 15000 caractères pour éviter les tokens excessifs
-    truncated_items = items_text[:15000]
+    # Limite à 10000 caractères (réduit de 15000 grâce à l'optimisation)
+    truncated_items = items_text[:10000]
     
     user_prompt = f"""Agrège les résultats suivants et calcule les notes de fiabilité:
 

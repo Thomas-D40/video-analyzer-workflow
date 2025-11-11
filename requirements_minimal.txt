@@ -1,0 +1,13 @@
+# Dépendances minimales pour extraire les arguments d'une vidéo YouTube
+# (première étape du workflow uniquement)
+
+# Extraction de transcription
+yt-dlp==2024.10.22
+
+# API OpenAI
+openai==1.51.0
+
+# Configuration (pour pydantic-settings et .env)
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+

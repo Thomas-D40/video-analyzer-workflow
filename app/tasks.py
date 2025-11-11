@@ -76,9 +76,9 @@ def process_youtube(youtube_url: str) -> dict:
         
         print(f"[{video_id}] Transcription extraite ({len(transcript_text)} caractères)")
         
-        # Étape 2: Extraction des arguments
-        print(f"[{video_id}] Étape 2: Extraction des arguments...")
-        arguments = extract_arguments(transcript_text)
+        # Étape 2: Extraction des arguments (avec MCP pour réduire les tokens)
+        print(f"[{video_id}] Étape 2: Extraction des arguments (avec MCP)...")
+        arguments = extract_arguments(transcript_text, video_id=video_id)
         
         if not arguments:
             raise ValueError("Aucun argument extrait de la transcription")
@@ -90,6 +90,11 @@ def process_youtube(youtube_url: str) -> dict:
             arg_text = arg.get("argument", "")
             stance = arg.get("stance", "affirmatif")
             print(f"[{video_id}]   Argument {idx}: {arg_text[:80]}... (stance: {stance})")
+        
+        # Enregistrement des arguments dans MCP pour utilisation ultérieure
+        from .utils.mcp_server import get_mcp_manager
+        mcp_manager = get_mcp_manager()
+        mcp_manager.register_arguments(video_id, arguments)
         
         # Étape 3: Persistance en base de données
         print(f"[{video_id}] Étape 3: Persistance en base de données...")
@@ -116,7 +121,7 @@ def process_youtube(youtube_url: str) -> dict:
             session.add(record)
             session.commit()
         
-        print(f"[{video_id}] Traitement terminé avec succès")
+        print(f"[{video_id}] Traitement terminé avec succès (MCP activé pour optimisation tokens)")
         
         return {
             "video_id": video_id,
@@ -139,6 +144,14 @@ def process_youtube(youtube_url: str) -> dict:
                 session.commit()
         except Exception as db_error:
             print(f"[{video_id}] Erreur lors de la mise à jour du statut d'erreur: {db_error}")
+        
+        # Nettoyage des ressources MCP en cas d'erreur
+        try:
+            from .utils.mcp_server import get_mcp_manager
+            mcp_manager = get_mcp_manager()
+            mcp_manager.clear_resources(video_id=video_id)
+        except Exception:
+            pass  # Ignore les erreurs de nettoyage MCP
         
         # Re-lancer l'exception pour que Celery la gère
         raise

@@ -3,14 +3,20 @@ Agent d'extraction des arguments pour et contre depuis les articles scientifique
 
 Cet agent analyse les articles trouvés pour chaque argument et extrait
 les points qui soutiennent ou contredisent l'argument, avec citation des sources.
+
+Utilise MCP pour réduire la consommation de tokens en utilisant des résumés
+d'articles plutôt que les snippets complets.
 """
 from typing import List, Dict
 import json
+import hashlib
 from openai import OpenAI
 from ..config import get_settings
+from ..utils.mcp_client import get_mcp_client
+from ..utils.mcp_server import get_mcp_manager
 
 
-def extract_pros_cons(argument: str, articles: List[Dict]) -> Dict[str, List[Dict]]:
+def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = "") -> Dict[str, List[Dict]]:
     """
     Extrait les arguments pour et contre depuis une liste d'articles scientifiques.
     
@@ -19,9 +25,13 @@ def extract_pros_cons(argument: str, articles: List[Dict]) -> Dict[str, List[Dic
     - Les points qui le contredisent ou le mettent en question (cons)
     - Pour chaque point, associe la source (URL de l'article)
     
+    Utilise MCP pour réduire les tokens en utilisant des résumés d'articles
+    plutôt que les snippets complets.
+    
     Args:
         argument: Texte de l'argument à analyser
         articles: Liste d'articles avec les champs "title", "url", "snippet"
+        argument_id: Identifiant unique de l'argument (pour MCP)
         
     Returns:
         Dictionnaire avec:
@@ -36,61 +46,50 @@ def extract_pros_cons(argument: str, articles: List[Dict]) -> Dict[str, List[Dic
     if not argument or not articles:
         return {"pros": [], "cons": []}
     
+    # Génération d'un ID unique pour l'argument si non fourni
+    if not argument_id:
+        argument_id = hashlib.md5(argument.encode()).hexdigest()[:8]
+    
+    # Enregistrement des articles dans MCP pour accès optimisé
+    mcp_manager = get_mcp_manager()
+    mcp_client = get_mcp_client()
+    
+    mcp_manager.register_articles(argument_id, articles)
+    # Récupère les articles résumés via MCP
+    summarized_articles = mcp_client.get_articles_for_analysis(argument_id)
+    
+    # Formatage optimisé du contexte (limite les tokens)
+    articles_context = mcp_client.format_articles_context(summarized_articles, max_length=6000)
+    
     client = OpenAI(api_key=settings.openai_api_key)
     
-    # Préparation du contexte: on combine les snippets des articles
-    # Limite à 10 articles pour éviter les tokens excessifs
-    articles_context = []
-    for article in articles[:10]:
-        articles_context.append({
-            "title": article.get("title", ""),
-            "url": article.get("url", ""),
-            "snippet": article.get("snippet", "")[:500]  # Limite chaque snippet à 500 caractères
-        })
-    
-    # Construction du prompt avec le contexte des articles
-    articles_text = "\n\n".join([
-        f"Article: {art['title']}\n"
-        f"URL: {art['url']}\n"
-        f"Extrait: {art['snippet']}"
-        for art in articles_context
-    ])
-    
+    # Prompt optimisé (plus court grâce aux résumés MCP)
     system_prompt = """Tu es un expert en analyse scientifique et critique d'arguments.
-Ton rôle est d'analyser des articles scientifiques pour identifier les points qui
-soutiennent (pros) ou contredisent (cons) un argument donné.
+Analyse des articles scientifiques pour identifier les points qui soutiennent (pros) ou contredisent (cons) un argument.
 
 Pour chaque article, identifie:
 - Les affirmations qui SUPPORTENT l'argument (pros)
 - Les affirmations qui le CONTREDISENT ou le QUESTIONNENT (cons)
 
-Pour chaque point identifié, tu dois:
-1. Formuler clairement le point (claim)
-2. Associer l'URL de l'article source (source)
+Pour chaque point:
+1. Formule clairement le point (claim)
+2. Associe l'URL de l'article source (source)
 
 IMPORTANT: 
 - Sois factuel et précis
 - Ne crée pas de points qui n'existent pas dans les articles
-- Si un article ne contient pas d'information pertinente, ne l'utilise pas
 - Chaque point doit être lié à une source réelle
 
-Format de réponse JSON:
+Format JSON:
 {
-  "pros": [
-    {"claim": "texte du point qui soutient", "source": "url de l'article"}
-  ],
-  "cons": [
-    {"claim": "texte du point qui contredit", "source": "url de l'article"}
-  ]
+  "pros": [{"claim": "...", "source": "..."}],
+  "cons": [{"claim": "...", "source": "..."}]
 }"""
-
-    # Limite à 10000 caractères pour éviter les tokens excessifs
-    truncated_articles = articles_text[:10000]
     
     user_prompt = f"""Argument à analyser: {argument}
 
 Articles à analyser:
-{truncated_articles}
+{articles_context}
 
 Extrais les points pour et contre cet argument depuis ces articles.
 Retourne uniquement le JSON, sans texte supplémentaire."""

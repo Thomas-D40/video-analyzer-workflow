@@ -1,8 +1,9 @@
 import re
+from typing import Optional
 from urllib.parse import urlparse, parse_qs
 
 
-def extract_video_id(youtube_url: str) -> str | None:
+def extract_video_id(youtube_url: str) -> Optional[str]:
     parsed = urlparse(youtube_url)
     if parsed.hostname in {"www.youtube.com", "youtube.com"}:
         qs = parse_qs(parsed.query)
