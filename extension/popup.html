@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Argument Analyzer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 YouTube Analyzer</h1>
+            <p class="subtitle">Analyse d'arguments avec fact-checking</p>
+        </header>
+
+        <div id="status" class="status hidden"></div>
+
+        <div id="controls">
+            <button id="analyzeBtn" class="btn-primary">
+                <span class="btn-icon">🔍</span>
+                Analyser cette vidéo
+            </button>
+        </div>
+
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Analyse en cours...</p>
+            <p class="loading-detail">Cela peut prendre 30-60 secondes</p>
+        </div>
+
+        <div id="results" class="results hidden">
+            <div class="results-header">
+                <h2>📊 Résultats</h2>
+                <div class="header-actions">
+                    <button id="newAnalysisBtn" class="btn-text" title="Nouvelle analyse">🔄</button>
+                    <button id="copyBtn" class="btn-text" title="Copier le rapport">📋</button>
+                </div>
+            </div>
+
+            <div id="videoSummary" class="video-summary">
+                <!-- Rempli par JS -->
+            </div>
+
+            <div id="argumentsList" class="arguments-list">
+                <!-- Liste des cartes arguments -->
+            </div>
+            <!DOCTYPE html>
+            <html lang="fr">
+
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>YouTube Argument Analyzer</title>
+                <link rel="stylesheet" href="styles.css">
+            </head>
+
+            <body>
+                <div class="container">
+                    <header>
+                        <h1>🎬 YouTube Analyzer</h1>
+                        <p class="subtitle">Analyse d'arguments avec fact-checking</p>
+                    </header>
+
+                    <div id="status" class="status hidden"></div>
+
+                    <div id="controls">
+                        <button id="analyzeBtn" class="btn-primary">
+                            <span class="btn-icon">🔍</span>
+                            Analyser cette vidéo
+                        </button>
+                    </div>
+
+                    <div id="loading" class="loading hidden">
+                        <div class="spinner"></div>
+                        <p>Analyse en cours...</p>
+                        <p class="loading-detail">Cela peut prendre 30-60 secondes</p>
+                    </div>
+
+                    <div id="results" class="results hidden">
+                        <div class="results-header">
+                            <h2>📊 Résultats</h2>
+                            <div class="header-actions">
+                                <button id="newAnalysisBtn" class="btn-text" title="Nouvelle analyse">🔄</button>
+                                <button id="copyBtn" class="btn-text" title="Copier le rapport">📋</button>
+                            </div>
+                        </div>
+
+                        <div id="videoSummary" class="video-summary">
+                            <!-- Rempli par JS -->
+                        </div>
+
+                        <div id="argumentsList" class="arguments-list">
+                            <!-- Liste des cartes arguments -->
+                        </div>
+
+                        <div id="rawReport" class="raw-report hidden">
+                            <!-- Markdown brut pour copie -->
+                        </div>
+                    </div>
+
+                    <div id="error" class="error hidden"></div>
+
+                    <!-- Modal Sources -->
+                    <div id="sourcesModal" class="modal hidden">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Sources de l'argument</h3>
+                                <button id="closeModalBtn" class="btn-close">×</button>
+                            </div>
+                            <div id="modalSourcesList" class="modal-body">
+                                <!-- Liste des sources injectée par JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <script src="popup.js"></script>
+            </body>
+
+            </html>
