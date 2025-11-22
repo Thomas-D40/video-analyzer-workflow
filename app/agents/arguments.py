@@ -99,25 +99,55 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
         for var, value in saved_proxy_vars.items():
             os.environ[var] = value
     
-    # Prompt optimisé pour l'extraction d'arguments (plus court grâce à MCP)
+    # Prompt amélioré pour filtrer les expériences de pensée et exemples illustratifs
     system_prompt = """Tu es un expert en analyse de discours et d'arguments. 
-Analyse la transcription d'une vidéo YouTube pour identifier les arguments principaux.
+Analyse la transcription d'une vidéo YouTube pour identifier TOUS les arguments principaux et les thèses centrales.
 
-Pour chaque argument, détermine si le langage est:
-- "affirmatif": présenté comme une vérité établie
-- "conditionnel": utilise des mots comme "peut-être", "il est possible que", etc.
+**QU'EST-CE QU'UN ARGUMENT RÉEL ?**
+Un argument est une affirmation factuelle, une thèse ou une position que l'auteur défend activement.
+Pour les vidéos éducatives ou de vulgarisation, considère les **points clés explicatifs** comme des arguments à vérifier.
 
-Retourne un JSON avec une clé "arguments" contenant une liste d'objets:
-- "argument": texte concis de l'argument
-- "stance": "affirmatif" ou "conditionnel"
+**CRITÈRES D'INCLUSION (CE QU'IL FAUT GARDER) :**
+1.  **Thèses contestables** : "Le nucléaire est la seule solution pour le climat".
+2.  **Affirmations factuelles majeures** : "Le cerveau humain consomme 20% de l'énergie du corps".
+3.  **Points clés d'une explication** : Si la vidéo explique un phénomène, extrait les étapes clés comme des affirmations.
 
-Format JSON:
+**OBJECTIF DE COUVERTURE :**
+- Ne te limite pas aux 2-3 points principaux.
+- Extrait une liste EXHAUSTIVE de tous les arguments substantiels (jusqu'à 15-20 arguments si nécessaire).
+- Si la vidéo est dense, sépare les points distincts plutôt que de les fusionner.
+
+**CRITÈRES D'EXCLUSION STRICTS (CE QU'IL FAUT IGNORER) :**
+1.  **Truismes et Évidences** : "L'eau ça mouille", "La guerre c'est mal".
+2.  **Définitions simples** : "Une biographie est un livre sur la vie de quelqu'un".
+3.  **Métaphores et analogies** : "Imaginez des carrés et triangles qui veulent se marier".
+4.  **Expériences de pensée** : "Supposons qu'un alien arrive sur Terre".
+5.  **Phrases de transition** : "Passons maintenant au point suivant".
+
+**EXEMPLES :**
+✅ ARGUMENT VALIDE : "Le réchauffement climatique est causé par l'activité humaine"
+✅ ARGUMENT VALIDE : "Les réseaux sociaux augmentent le risque de dépression chez les ados"
+✅ ARGUMENT VALIDE : "La mécanique quantique remet en cause le déterminisme classique" (Point clé éducatif)
+❌ NON-ARGUMENT : "Les biographies ne sont pas des sources de vérité absolue" (Définition méthodologique simple).
+❌ NON-ARGUMENT : "Imaginez que vous êtes un atome" (Analogie).
+
+**INSTRUCTIONS :**
+1. Identifie les thèses centrales et les points clés que l'auteur présente.
+2. Ignore tout ce qui est trivial, évident ou purement illustratif.
+3. Reformule l'argument de manière concise et affirmative.
+4. Pour chaque argument réel, détermine le ton :
+   - "affirmatif" : présenté comme une vérité établie
+   - "conditionnel" : utilise "peut-être", "il est possible que", "pourrait", etc.
+
+**FORMAT JSON :**
 {
   "arguments": [
-    {"argument": "...", "stance": "affirmatif"},
-    {"argument": "...", "stance": "conditionnel"}
+    {"argument": "texte concis de l'argument réel", "stance": "affirmatif"},
+    {"argument": "texte concis de l'argument réel", "stance": "conditionnel"}
   ]
-}"""
+}
+
+N'inclus QUE les arguments substantiels. Si la vidéo ne contient que des banalités, retourne une liste vide."""
     
     user_prompt = f"""Analyse cette transcription et extrais les arguments principaux:
 
@@ -127,12 +157,12 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Utilisation de gpt-4o-mini pour réduire les coûts
+            model=settings.openai_smart_model,  # Utilisation du modèle intelligent (GPT-4o) pour l'extraction
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.3,  # Température basse pour plus de cohérence
+            temperature=0.2,  # Température basse pour plus de précision
             response_format={"type": "json_object"}  # Force le format JSON
         )
         

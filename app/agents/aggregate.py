@@ -133,7 +133,7 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=settings.openai_smart_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -183,9 +183,19 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
         # Si l'agrégation a échoué, on retourne au moins les données brutes
         if not validated_arguments and items:
             for item in items:
-                # Calcul simple de fiabilité basé sur le nombre de sources
-                num_sources = len(item.get("pros", [])) + len(item.get("cons", []))
-                reliability = min(0.9, 0.3 + (num_sources * 0.1))  # 0.3 de base + 0.1 par source, max 0.9
+                # Compter les VRAIES sources (web, scientific, statistical) au lieu des pros/cons
+                sources = item.get("sources", {})
+                num_web = len(sources.get("web", []))
+                num_scientific = len(sources.get("scientific", []))
+                num_statistical = len(sources.get("statistical", []))
+                num_sources = num_web + num_scientific + num_statistical
+                
+                # Si aucune source, fiabilité = 0.0 pour indiquer l'absence de sources
+                if num_sources == 0:
+                    reliability = 0.0
+                else:
+                    # 0.3 de base + 0.1 par source, max 0.9
+                    reliability = min(0.9, 0.3 + (num_sources * 0.1))
                 
                 validated_arguments.append({
                     "argument": item.get("argument", ""),
@@ -217,9 +227,19 @@ def _fallback_aggregation(items: List[Dict]) -> Dict:
     arguments = []
     
     for item in items:
-        num_sources = len(item.get("pros", [])) + len(item.get("cons", []))
-        # Fiabilité basique: 0.3 de base + 0.1 par source, maximum 0.9
-        reliability = min(0.9, 0.3 + (num_sources * 0.1))
+        # Compter les VRAIES sources (web, scientific, statistical) au lieu des pros/cons
+        sources = item.get("sources", {})
+        num_web = len(sources.get("web", []))
+        num_scientific = len(sources.get("scientific", []))
+        num_statistical = len(sources.get("statistical", []))
+        num_sources = num_web + num_scientific + num_statistical
+        
+        # Si aucune source, fiabilité = 0.0 pour indiquer l'absence de sources
+        if num_sources == 0:
+            reliability = 0.0
+        else:
+            # Fiabilité basique: 0.3 de base + 0.1 par source, maximum 0.9
+            reliability = min(0.9, 0.3 + (num_sources * 0.1))
         
         arguments.append({
             "argument": item.get("argument", ""),

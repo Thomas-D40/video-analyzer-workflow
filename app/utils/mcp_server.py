@@ -126,7 +126,7 @@ class MCPServerManager:
             summarized_articles.append({
                 "title": article.get("title", ""),
                 "url": article.get("url", ""),
-                "summary": article.get("snippet", "")[:300]  # Limite à 300 caractères
+                "summary": (article.get("snippet") or article.get("summary") or "")[:300]  # Limite à 300 caractères
             })
         
         self._resources[resource_id] = {
