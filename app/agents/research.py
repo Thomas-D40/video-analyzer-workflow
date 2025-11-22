@@ -5,6 +5,7 @@ Cet agent recherche des articles scientifiques, des études et des sources
 fiables pour chaque argument identifié dans la vidéo.
 """
 from typing import List, Dict
+from duckduckgo_search import DDGS
 from ..config import get_settings
 
 
@@ -12,8 +13,8 @@ def search_literature(argument: str, max_results: int = 10) -> List[Dict[str, st
     """
     Recherche des articles scientifiques et sources fiables pour un argument donné.
     
-    Utilise SerpAPI pour rechercher dans Google Scholar, PubMed, et autres sources
-    académiques. Si SerpAPI n'est pas disponible, utilise une recherche Google standard.
+    Utilise DuckDuckGo pour rechercher des sources académiques et fiables.
+    Cette méthode est gratuite et ne nécessite pas de clé API.
     
     Args:
         argument: Texte de l'argument à rechercher
@@ -26,117 +27,115 @@ def search_literature(argument: str, max_results: int = 10) -> List[Dict[str, st
         - "snippet": extrait ou résumé
         - "source": type de source (ex: "scholar", "pubmed", "article")
     """
-    settings = get_settings()
-    
     if not argument or len(argument.strip()) < 5:
         return []
     
-    # Construction de la requête de recherche
-    # On ajoute des termes pour favoriser les sources scientifiques
-    search_query = f"{argument} étude scientifique recherche académique"
+    # Construction de la requête de recherche via LLM
+    # Les arguments sont souvent trop longs pour une recherche directe
+    search_queries = _generate_search_queries(argument)
     
-    articles = []
+    all_articles = []
+    seen_urls = set()
     
-    # Tentative avec SerpAPI si la clé est disponible
-    if settings.search_api_key:
+    for query in search_queries:
         try:
-            articles = _search_with_serpapi(search_query, settings.search_api_key, max_results)
-            if articles:
-                return articles
+            results = _search_with_ddg(query, max_results=5) # 5 résultats par requête
+            for article in results:
+                if article["url"] not in seen_urls:
+                    all_articles.append(article)
+                    seen_urls.add(article["url"])
         except Exception as e:
-            print(f"Erreur avec SerpAPI, passage à une recherche alternative: {e}")
-    
-    # Fallback: recherche avec Google Scholar via une requête HTTP directe
-    # Note: Cette approche est limitée car Google Scholar bloque les scrapers
-    # En production, il faudrait utiliser une API payante ou un service de proxy
-    try:
-        articles = _search_with_google_scholar_fallback(argument, max_results)
-    except Exception as e:
-        print(f"Erreur lors de la recherche bibliographique: {e}")
-    
-    return articles
+            print(f"[ERROR research] Erreur pour la requête '{query}': {e}")
+            
+    return all_articles[:max_results]
 
 
-def _search_with_serpapi(query: str, api_key: str, max_results: int) -> List[Dict[str, str]]:
+def _generate_search_queries(argument: str) -> List[str]:
     """
-    Recherche avec SerpAPI (service payant mais fiable).
+    Génère des requêtes de recherche optimisées via LLM.
+    """
+    from openai import OpenAI
+    import json
+    
+    settings = get_settings()
+    if not settings.openai_api_key:
+        # Fallback si pas de clé API: mots-clés simples
+        return [f"{argument[:50]} étude"]
+        
+    client = OpenAI(api_key=settings.openai_api_key)
+    
+    prompt = f"""Tu es un expert en recherche d'information scientifique et fact-checking.
+Ton but est de transformer un argument complexe en 2-3 requêtes de recherche optimisées pour trouver des sources FIABLES (études, statistiques, consensus scientifique).
+
+Argument: "{argument}"
+
+**Stratégie de recherche :**
+1.  Une requête pour trouver des **données/statistiques** ("chiffres", "statistiques", "data").
+2.  Une requête pour trouver le **consensus scientifique** ou des études ("étude", "science", "meta-analysis").
+3.  Une requête de **fact-checking** direct ("vrai ou faux", "fact check", "debunk").
+
+**Règles :**
+- Utilise des mots-clés précis.
+- Évite les termes génériques qui mènent à des blogs ou des forums.
+- Si l'argument est une opinion, cherche des faits qui la confirment ou l'infirment.
+
+Réponds UNIQUEMENT avec un objet JSON contenant une liste de chaînes de caractères sous la clé "queries".
+Exemple: {{"queries": ["pollution eau france statistiques 2024", "impact pesticides santé méta-analyse", "qualité eau potable france fact check"]}}
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+        
+        content = response.choices[0].message.content
+        data = json.loads(content)
+        queries = data.get("queries", [])
+        
+        # Fallback si vide
+        if not queries:
+            queries = [f"{argument[:50]}"]
+            
+        print(f"[DEBUG research] Requêtes générées: {queries}")
+        return queries
+        
+    except Exception as e:
+        print(f"[ERROR research] Erreur génération requêtes: {e}")
+        return [f"{argument[:50]}"]
+
+
+def _search_with_ddg(query: str, max_results: int) -> List[Dict[str, str]]:
+    """
+    Recherche avec DuckDuckGo (Gratuit).
     
     Args:
         query: Requête de recherche
-        api_key: Clé API SerpAPI
         max_results: Nombre maximum de résultats
         
     Returns:
         Liste d'articles trouvés
     """
-    from serpapi import GoogleSearch
-    
-    # Recherche dans Google Scholar
-    search = GoogleSearch({
-        "q": query,
-        "engine": "google_scholar",
-        "api_key": api_key,
-        "num": max_results
-    })
-    
-    results = search.get_dict()
     articles = []
     
-    # Parsing des résultats de SerpAPI
-    if "organic_results" in results:
-        for result in results["organic_results"][:max_results]:
-            articles.append({
-                "title": result.get("title", ""),
-                "url": result.get("link", ""),
-                "snippet": result.get("snippet", ""),
-                "source": "scholar"
-            })
-    
-    # Si pas assez de résultats, on cherche aussi dans Google avec filtre scientifique
-    if len(articles) < max_results:
-        news_search = GoogleSearch({
-            "q": f"{query} site:pubmed.ncbi.nlm.nih.gov OR site:arxiv.org OR site:doi.org",
-            "engine": "google",
-            "api_key": api_key,
-            "num": max_results - len(articles)
-        })
-        
-        news_results = news_search.get_dict()
-        
-        if "organic_results" in news_results:
-            for result in news_results["organic_results"]:
-                if len(articles) >= max_results:
-                    break
+    try:
+        print(f"[INFO research] Recherche DDG: '{query}'")
+        with DDGS() as ddgs:
+            # Recherche standard DuckDuckGo
+            results = list(ddgs.text(query, max_results=max_results))
+            print(f"[INFO research] {len(results)} résultats trouvés pour '{query}'")
+            
+            for result in results:
                 articles.append({
                     "title": result.get("title", ""),
-                    "url": result.get("link", ""),
-                    "snippet": result.get("snippet", ""),
-                    "source": "article"
+                    "url": result.get("href", ""),
+                    "snippet": result.get("body", ""),
+                    "source": "web"
                 })
+                
+    except Exception as e:
+        print(f"[ERROR research] Erreur DuckDuckGo: {e}")
     
     return articles
-
-
-def _search_with_google_scholar_fallback(argument: str, max_results: int) -> List[Dict[str, str]]:
-    """
-    Fallback: recherche simplifiée avec requêtes HTTP directes.
-    
-    ATTENTION: Cette méthode est limitée car Google Scholar bloque les scrapers.
-    En production, il est recommandé d'utiliser SerpAPI ou une autre API payante.
-    
-    Args:
-        argument: Argument à rechercher
-        max_results: Nombre maximum de résultats
-        
-    Returns:
-        Liste d'articles (peut être vide si la méthode échoue)
-    """
-    # Cette méthode est une placeholder
-    # En production, il faudrait utiliser une API payante ou un service de proxy
-    
-    # Pour l'instant, on retourne une liste vide avec un message
-    # L'utilisateur devra configurer SerpAPI ou une alternative
-    print("Recherche bibliographique: SerpAPI non configuré, pas de résultats disponibles")
-    print("Pour activer la recherche, configurez SEARCH_API_KEY avec une clé SerpAPI")
-    
-    return []

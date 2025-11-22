@@ -43,7 +43,11 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
     if not settings.openai_api_key:
         raise ValueError("OPENAI_API_KEY non configurée dans les variables d'environnement")
     
+    print(f"[DEBUG extract_pros_cons] Argument: {argument[:50]}...")
+    print(f"[DEBUG extract_pros_cons] Nombre d'articles reçus: {len(articles)}")
+    
     if not argument or not articles:
+        print(f"[DEBUG extract_pros_cons] Retour vide: argument={bool(argument)}, articles={len(articles) if articles else 0}")
         return {"pros": [], "cons": []}
     
     # Génération d'un ID unique pour l'argument si non fourni
@@ -67,36 +71,34 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
     system_prompt = """Tu es un expert en analyse scientifique et critique d'arguments.
 Analyse des articles scientifiques pour identifier les points qui soutiennent (pros) ou contredisent (cons) un argument.
 
+**RÈGLES STRICTES DE VÉRIFICATION :**
+1.  **Preuve Explicite Requise** : Chaque point ("claim") DOIT être explicitement soutenu par le texte d'un article fourni.
+2.  **Pas d'Invention** : Si aucun article ne mentionne un point, NE L'INVENTE PAS.
+3.  **Citation Obligatoire** : Chaque claim doit être associé à l'URL exacte de l'article qui le contient.
+4.  **Pertinence** : Ne retiens que les points qui sont directement liés à l'argument analysé.
+
 Pour chaque article, identifie:
 - Les affirmations qui SUPPORTENT l'argument (pros)
-- Les affirmations qui le CONTREDISENT ou le QUESTIONNENT (cons)
+- Les affirmations qui CONTREDISENT ou QUESTIONNENT l'argument (cons)
 
-Pour chaque point:
-1. Formule clairement le point (claim)
-2. Associe l'URL de l'article source (source)
-
-IMPORTANT: 
-- Sois factuel et précis
-- Ne crée pas de points qui n'existent pas dans les articles
-- Chaque point doit être lié à une source réelle
-
-Format JSON:
+Réponds en JSON avec ce format exact:
 {
-  "pros": [{"claim": "...", "source": "..."}],
-  "cons": [{"claim": "...", "source": "..."}]
-}"""
-    
+    "pros": [{"claim": "description du point (avec citation implicite)", "source": "URL de l'article"}],
+    "cons": [{"claim": "description du point (avec citation implicite)", "source": "URL de l'article"}]
+}
+
+Si aucun article ne contient d'informations pertinentes, retourne des listes vides."""
+
     user_prompt = f"""Argument à analyser: {argument}
 
-Articles à analyser:
+Articles scientifiques:
 {articles_context}
 
-Extrais les points pour et contre cet argument depuis ces articles.
-Retourne uniquement le JSON, sans texte supplémentaire."""
+Analyse ces articles et extrais les points pour (pros) et contre (cons) cet argument."""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=settings.openai_smart_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -107,34 +109,11 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
         
         # Parse la réponse JSON
         content = response.choices[0].message.content
-        parsed = json.loads(content)
-        
-        # Validation et nettoyage
-        pros = []
-        cons = []
-        
-        if isinstance(parsed, dict):
-            # Extraction des pros
-            if "pros" in parsed and isinstance(parsed["pros"], list):
-                for pro in parsed["pros"]:
-                    if isinstance(pro, dict) and "claim" in pro and "source" in pro:
-                        pros.append({
-                            "claim": pro["claim"].strip(),
-                            "source": pro["source"].strip()
-                        })
-            
-            # Extraction des cons
-            if "cons" in parsed and isinstance(parsed["cons"], list):
-                for con in parsed["cons"]:
-                    if isinstance(con, dict) and "claim" in con and "source" in con:
-                        cons.append({
-                            "claim": con["claim"].strip(),
-                            "source": con["source"].strip()
-                        })
+        result = json.loads(content)
         
         return {
-            "pros": pros,
-            "cons": cons
+            "pros": result.get("pros", []),
+            "cons": result.get("cons", [])
         }
         
     except json.JSONDecodeError as e:
