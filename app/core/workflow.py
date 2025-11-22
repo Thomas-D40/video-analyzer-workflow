@@ -24,7 +24,9 @@ from app.agents.aggregate import aggregate_results
 from app.utils.report_formatter import generate_markdown_report
 
 
-def process_video(youtube_url: str) -> Dict[str, Any]:
+from app.services.storage import save_analysis, get_analysis
+
+async def process_video(youtube_url: str, force_refresh: bool = False) -> Dict[str, Any]:
     """
     Traite une vidéo YouTube et retourne l'analyse complète.
     
@@ -47,6 +49,17 @@ def process_video(youtube_url: str) -> Dict[str, Any]:
     if not video_id:
         raise ValueError("Impossible d'extraire l'ID de la vidéo depuis l'URL")
     
+    # Étape 1.5: Vérification du cache
+    if not force_refresh:
+        cached_analysis = await get_analysis(video_id)
+        if cached_analysis and cached_analysis.status == "completed":
+            print(f"[INFO] Analyse trouvée en cache pour {video_id}")
+            result = cached_analysis.content
+            # On ajoute les métadonnées de cache
+            result["cached"] = True
+            result["last_updated"] = cached_analysis.updated_at.isoformat()
+            return result
+
     # Étape 2: Extraction de la transcription
     transcript_text = extract_transcript(youtube_url)
     if not transcript_text or len(transcript_text.strip()) < 50:
@@ -175,9 +188,18 @@ def process_video(youtube_url: str) -> Dict[str, Any]:
     
     report_markdown = generate_markdown_report(output_data)
     
-    return {
+    result = {
         "video_id": video_id,
         "youtube_url": youtube_url,
         "arguments": arguments,
         "report_markdown": report_markdown
     }
+
+    # Sauvegarde en base de données
+    try:
+        await save_analysis(video_id, youtube_url, result)
+        print(f"[INFO] Analyse sauvegardée pour {video_id}")
+    except Exception as e:
+        print(f"[ERROR] Erreur sauvegarde DB: {e}")
+
+    return result

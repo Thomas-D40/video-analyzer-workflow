@@ -44,6 +44,7 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     """Requête d'analyse de vidéo."""
     url: str
+    force_refresh: bool = False
 
 
 class AnalyzeResponse(BaseModel):
@@ -83,7 +84,7 @@ async def analyze_video(request: AnalyzeRequest):
         HTTPException: Si l'URL est invalide ou le traitement échoue
     """
     try:
-        result = process_video(request.url)
+        result = await process_video(request.url, force_refresh=request.force_refresh)
         
         return AnalyzeResponse(
             status="success",

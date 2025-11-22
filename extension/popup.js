@@ -211,12 +211,21 @@ function renderResults(data) {
     // Correction: data.arguments.length au lieu de data.arguments_count si undefined
     const argCount = data.arguments_count !== undefined ? data.arguments_count : (data.arguments ? data.arguments.length : 0);
 
+    // Formatage de la date si présente
+    let dateHtml = '';
+    if (data.last_updated) {
+        const date = new Date(data.last_updated);
+        const dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        dateHtml = `<div class="summary-date">Mis à jour le ${dateStr}</div>`;
+    }
+
     videoSummary.innerHTML = `
         <div class="summary-card">
             <div class="summary-header-row">
                 <div class="summary-title">VIDÉO ANALYSÉE</div>
                 <div class="summary-stats">${argCount} arguments</div>
             </div>
+            ${dateHtml}
             ${summaryTableHtml}
         </div>
     `;
@@ -382,7 +391,7 @@ async function saveAnalysis(url, data) {
     await chrome.storage.local.set(storageData);
 }
 
-async function analyzeVideo() {
+async function analyzeVideo(forceRefresh = false) {
     try {
         // Reset UI
         errorDiv.classList.add('hidden');
@@ -396,7 +405,10 @@ async function analyzeVideo() {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: currentVideoUrl })
+            body: JSON.stringify({
+                url: currentVideoUrl,
+                force_refresh: forceRefresh
+            })
         });
 
         if (!response.ok) {
@@ -409,7 +421,12 @@ async function analyzeVideo() {
         // Sauvegarde et Affichage
         await saveAnalysis(currentVideoUrl, data.data);
         renderResults(data.data);
-        showStatus('Analyse terminée !', 'success');
+
+        if (data.data.cached) {
+            showStatus('Résultat récupéré du cache', 'info');
+        } else {
+            showStatus('Analyse terminée !', 'success');
+        }
 
     } catch (error) {
         console.error('Erreur:', error);
@@ -446,11 +463,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // --- Event Listeners ---
 
-analyzeBtn.addEventListener('click', analyzeVideo);
+analyzeBtn.addEventListener('click', () => analyzeVideo(false));
 
 newAnalysisBtn.addEventListener('click', () => {
     // Forcer une nouvelle analyse
-    analyzeVideo();
+    analyzeVideo(true);
 });
 
 copyBtn.addEventListener('click', () => {
