@@ -47,6 +47,7 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         'writeautomaticsub': True,
         'subtitleslangs': ['fr', 'en', 'fr-FR', 'en-US', 'en-GB'],
         'skip_download': True,
+        'format': 'worst',  # Format le plus léger pour éviter les erreurs
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': False,
