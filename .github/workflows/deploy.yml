@@ -26,7 +26,8 @@ jobs:
             cd /opt/video-analyzer
             
             # Pull latest changes
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             
             # Create .env file from secrets
             echo "ENV=production" > .env
