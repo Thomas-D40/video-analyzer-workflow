@@ -32,6 +32,7 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         try:
             with open(cookie_file_path, 'w') as f:
                 f.write(youtube_cookies)
+            print(f"[DEBUG] Cookie file created: {cookie_file_path}")
         except Exception as e:
             print(f"Erreur lors de la création du fichier de cookies: {e}")
             cookie_file_path = None
@@ -54,6 +55,8 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         'fragment_retries': 3,
         'cookiefile': cookie_file_path,  # Utiliser uniquement les cookies transmis
     }
+    
+    print(f"[DEBUG] yt-dlp config: cookiefile={cookie_file_path}")
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -249,6 +252,14 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         # En cas d'erreur, on retourne None
         print(f"Erreur lors de l'extraction de la transcription: {e}")
         return None
+    finally:
+        # Nettoyer le fichier temporaire de cookies
+        if cookie_file_path and os.path.exists(cookie_file_path):
+            try:
+                os.remove(cookie_file_path)
+                print(f"[DEBUG] Cookie file cleaned up: {cookie_file_path}")
+            except Exception as e:
+                print(f"[DEBUG] Failed to cleanup cookie file: {e}")
 
 
 def _parse_subtitle_content(content: str) -> Optional[str]:
