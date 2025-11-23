@@ -13,30 +13,16 @@ import time
 import json
 
 
-def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optional[str]:
+def extract_transcript(youtube_url: str) -> Optional[str]:
     """
     Extrait la transcription d'une vidéo YouTube.
     
     Args:
         youtube_url: URL complète de la vidéo YouTube
-        youtube_cookies: Cookies YouTube au format Netscape (optionnel)
         
     Returns:
         Transcription sous forme de texte, ou None si indisponible
     """
-    # Créer un fichier temporaire pour les cookies si fournis
-    cookie_file_path = None
-    if youtube_cookies:
-        import uuid
-        cookie_file_path = f'/tmp/cookies_{uuid.uuid4().hex}.txt'
-        try:
-            with open(cookie_file_path, 'w') as f:
-                f.write(youtube_cookies)
-            print(f"[DEBUG] Cookie file created: {cookie_file_path}")
-        except Exception as e:
-            print(f"Erreur lors de la création du fichier de cookies: {e}")
-            cookie_file_path = None
-    
     # Configuration yt-dlp pour extraire uniquement la transcription
     # On supprime les warnings en redirigeant les logs
     import logging
@@ -46,27 +32,19 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
     ydl_opts = {
         'writesubtitles': True,
         'writeautomaticsub': True,
-        'subtitleslangs': ['fr', 'en', 'fr-FR', 'en-US', 'en-GB'],
-        'skip_download': True,
+        'subtitleslangs': ['fr', 'en', 'fr-FR', 'en-US', 'en-GB'],  # Plus de variantes
+        'skip_download': True,  # On ne télécharge pas la vidéo
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': False,
-        'retries': 3,
+        'retries': 3,  # Nombre de tentatives en cas d'erreur
         'fragment_retries': 3,
-        'cookiefile': cookie_file_path,  # Utiliser uniquement les cookies transmis
+        'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},  # Éviter certains formats problématiques
+        'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,  # Utiliser les cookies si disponibles
     }
     
-    print(f"[DEBUG] yt-dlp config: cookiefile={cookie_file_path}")
-    
     try:
-        # Première passe : récupérer les infos SANS cookies pour éviter l'erreur de format
-        ydl_opts_info = {
-            'quiet': True,
-            'no_warnings': True,
-            'skip_download': True,
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             # Récupération des informations de la vidéo
             info = ydl.extract_info(youtube_url, download=False)
             
@@ -145,6 +123,18 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
                     'writesubtitles': True,
                     'writeautomaticsub': True,
                     'subtitleslangs': ['fr', 'en'],  # Limiter pour éviter trop de requêtes
+                    'skip_download': True,
+                    'quiet': True,
+                    'no_warnings': True,
+                    'retries': 2,
+                    'fragment_retries': 2,
+                    'outtmpl': os.path.join(tmpdir, '%(id)s.%(ext)s'),
+                    'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,
+                }
+                with yt_dlp.YoutubeDL(sub_opts) as sub_ydl:
+                    try:
+                        sub_ydl.download([youtube_url])
+                        # Chercher tous les fichiers de sous-titres générés
                         for file in os.listdir(tmpdir):
                             if file.endswith(('.vtt', '.srt', '.ttml')):
                                 sub_file = os.path.join(tmpdir, file)
@@ -247,14 +237,6 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         # En cas d'erreur, on retourne None
         print(f"Erreur lors de l'extraction de la transcription: {e}")
         return None
-    finally:
-        # Nettoyer le fichier temporaire de cookies
-        if cookie_file_path and os.path.exists(cookie_file_path):
-            try:
-                os.remove(cookie_file_path)
-                print(f"[DEBUG] Cookie file cleaned up: {cookie_file_path}")
-            except Exception as e:
-                print(f"[DEBUG] Failed to cleanup cookie file: {e}")
 
 
 def _parse_subtitle_content(content: str) -> Optional[str]:
