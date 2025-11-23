@@ -4,15 +4,16 @@ API FastAPI pour l'analyse de vidéos YouTube.
 Expose un endpoint POST /api/analyze qui accepte une URL YouTube
 et retourne l'analyse complète (arguments, sources, scores).
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 from typing import Dict, Any
 import os
+import logging
 
 from app.core.workflow import process_video
 from app.config import get_settings
-import logging
+from app.core.auth import verify_api_key
 
 # Configuration du logging
 logging.basicConfig(
@@ -22,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://dummy:dummy@localhost:5432/dummy")
+os.environ.setdefault("DATABASE_URL", "mongodb://localhost:27017")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 app = FastAPI(
@@ -69,7 +70,7 @@ async def root():
     }
 
 
-@app.post("/api/analyze", response_model=AnalyzeResponse)
+@app.post("/api/analyze", response_model=AnalyzeResponse, dependencies=[Depends(verify_api_key)])
 async def analyze_video(request: AnalyzeRequest):
     """
     Analyse une vidéo YouTube.

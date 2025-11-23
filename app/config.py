@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_smart_model: str = "gpt-4o"
     search_api_key: Optional[str] = None
+    allowed_api_keys: str = ""
+
+    @property
+    def api_keys_set(self) -> set[str]:
+        return {k.strip() for k in self.allowed_api_keys.split(",") if k.strip()}
 
 
 @lru_cache(maxsize=1)
