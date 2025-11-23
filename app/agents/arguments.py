@@ -12,9 +12,6 @@ import json
 import os
 from openai import OpenAI
 from ..config import get_settings
-from ..utils.mcp_client import get_mcp_client
-from ..utils.mcp_server import get_mcp_manager
-
 
 def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str, str]]:
     """
@@ -24,12 +21,9 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
     - Les arguments/thèses principaux mis en avant
     - Le ton utilisé (affirmatif vs conditionnel)
     
-    Utilise MCP pour réduire les tokens en accédant à la transcription
-    via des références optimisées plutôt que d'envoyer tout le contenu.
-    
     Args:
         transcript_text: Texte de la transcription de la vidéo
-        video_id: Identifiant de la vidéo (optionnel, pour MCP)
+        video_id: Identifiant de la vidéo (optionnel)
         
     Returns:
         Liste de dictionnaires avec les champs:
@@ -44,20 +38,12 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
     if not transcript_text or len(transcript_text.strip()) < 50:
         # Si la transcription est trop courte ou vide, on retourne une liste vide
         return []
-    
-    # Enregistrement de la transcription dans MCP pour accès optimisé
-    mcp_manager = get_mcp_manager()
-    mcp_client = get_mcp_client()
-    
-    if video_id:
-        mcp_manager.register_transcript(video_id, transcript_text)
-        # Récupère une version optimisée (résumé) au lieu de tout le texte
-        optimized_transcript = mcp_client.get_transcript_for_analysis(video_id, max_chars=8000)
-    else:
-        # Fallback: troncature simple si pas de video_id
-        optimized_transcript = transcript_text[:8000]
-        if len(transcript_text) > 8000:
-            optimized_transcript += f"\n\n[Note: Transcription complète de {len(transcript_text)} caractères]"
+
+    # Troncature simple de la transcription pour éviter de dépasser les limites de tokens
+    # On garde les 15000 premiers caractères (environ 3-4k tokens)
+    optimized_transcript = transcript_text[:15000]
+    if len(transcript_text) > 15000:
+        optimized_transcript += f"\n\n[Note: Transcription complète de {len(transcript_text)} caractères]"
     
     # Initialisation du client OpenAI sans paramètres de proxy
     # (certaines variables d'environnement peuvent causer des problèmes)

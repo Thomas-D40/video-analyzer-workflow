@@ -13,8 +13,6 @@ from typing import List, Dict
 import json
 from openai import OpenAI
 from ..config import get_settings
-from ..utils.mcp_client import get_mcp_client
-
 
 def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
     """
@@ -26,16 +24,13 @@ def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
     - Le consensus entre les sources
     - Le ton de l'argument (affirmatif vs conditionnel)
     
-    Utilise MCP pour réduire les tokens en optimisant le format des données
-    envoyées dans le prompt.
-    
     Args:
         items: Liste de dictionnaires contenant:
             - "argument": texte de l'argument
             - "pros": liste de points pour
             - "cons": liste de points contre
             - "stance": "affirmatif" ou "conditionnel" (optionnel)
-        video_id: Identifiant de la vidéo (optionnel, pour MCP)
+        video_id: Identifiant de la vidéo (optionnel)
             
     Returns:
         Dictionnaire avec le schéma:
@@ -60,7 +55,6 @@ def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
         return {"arguments": []}
     
     client = OpenAI(api_key=settings.openai_api_key)
-    mcp_client = get_mcp_client()
     
     # Préparation optimisée du contexte pour l'agrégation
     # On limite la taille des pros/cons pour réduire les tokens

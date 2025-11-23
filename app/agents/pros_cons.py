@@ -12,9 +12,6 @@ import json
 import hashlib
 from openai import OpenAI
 from ..config import get_settings
-from ..utils.mcp_client import get_mcp_client
-from ..utils.mcp_server import get_mcp_manager
-
 
 def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = "") -> Dict[str, List[Dict]]:
     """
@@ -25,13 +22,10 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
     - Les points qui le contredisent ou le mettent en question (cons)
     - Pour chaque point, associe la source (URL de l'article)
     
-    Utilise MCP pour réduire les tokens en utilisant des résumés d'articles
-    plutôt que les snippets complets.
-    
     Args:
         argument: Texte de l'argument à analyser
         articles: Liste d'articles avec les champs "title", "url", "snippet"
-        argument_id: Identifiant unique de l'argument (pour MCP)
+        argument_id: Identifiant unique de l'argument (optionnel)
         
     Returns:
         Dictionnaire avec:
@@ -54,16 +48,23 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
     if not argument_id:
         argument_id = hashlib.md5(argument.encode()).hexdigest()[:8]
     
-    # Enregistrement des articles dans MCP pour accès optimisé
-    mcp_manager = get_mcp_manager()
-    mcp_client = get_mcp_client()
+    # Formatage du contexte des articles
+    articles_context = ""
+    current_length = 0
+    max_length = 6000
     
-    mcp_manager.register_articles(argument_id, articles)
-    # Récupère les articles résumés via MCP
-    summarized_articles = mcp_client.get_articles_for_analysis(argument_id)
-    
-    # Formatage optimisé du contexte (limite les tokens)
-    articles_context = mcp_client.format_articles_context(summarized_articles, max_length=6000)
+    for article in articles:
+        article_text = f"Article: {article.get('title', '')}\nURL: {article.get('url', '')}\nRésumé: {article.get('snippet', '')}\n\n"
+        
+        if current_length + len(article_text) > max_length:
+            break
+        
+        articles_context += article_text
+        current_length += len(article_text)
+        
+    if len(articles) > 0 and not articles_context:
+         # Fallback si le premier article est trop long (peu probable avec snippet)
+         articles_context = f"Article: {articles[0].get('title', '')}\nURL: {articles[0].get('url', '')}\nRésumé: {articles[0].get('snippet', '')[:max_length]}\n\n"
     
     client = OpenAI(api_key=settings.openai_api_key)
     
