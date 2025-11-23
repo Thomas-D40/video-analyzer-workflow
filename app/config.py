@@ -13,11 +13,9 @@ class Settings(BaseSettings):
     env: str = "development"
     database_url: str
     mongo_db_name: str = "video_analyzer"
-    redis_url: str
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
     openai_smart_model: str = "gpt-4o"
-    search_api_key: Optional[str] = None
     allowed_api_keys: str = ""
 
     @property

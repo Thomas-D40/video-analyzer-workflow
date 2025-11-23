@@ -9,8 +9,8 @@ Session initiale - Extraction d'arguments uniquement
 
 1. **Infrastructure de base**
    - FastAPI avec endpoint `/analyze`
-   - Celery + Redis pour les tâches asynchrones
-   - PostgreSQL pour le stockage
+
+   - MongoDB pour le stockage
    - Docker Compose configuré avec healthchecks
 
 2. **Workflow actuel (première étape uniquement)**
@@ -22,7 +22,7 @@ Session initiale - Extraction d'arguments uniquement
 
 3. **Agents créés (non utilisés actuellement)**
    - `app/agents/arguments.py` - ✅ Utilisé
-   - `app/agents/research.py` - ⏸️ Prêt (SerpAPI)
+   - `app/agents/research.py` - ⏸️ Prêt (DuckDuckGo)
    - `app/agents/pros_cons.py` - ⏸️ Prêt (OpenAI)
    - `app/agents/aggregate.py` - ⏸️ Prêt (OpenAI)
 
@@ -40,9 +40,10 @@ video-analyzer-workflow/
 │   │   ├── youtube.py        # Extraction video_id
 │   │   └── transcript.py    # Extraction transcription
 │   ├── main.py              # API FastAPI
-│   ├── tasks.py              # Tâche Celery (étape 1 uniquement)
-│   ├── models.py             # Modèles SQLModel
-│   ├── db.py                 # Configuration DB
+
+│   ├── models.py             # Modèles Pydantic
+│   ├── db/
+│       └── mongo.py          # Configuration MongoDB
 │   ├── config.py             # Configuration (pydantic-settings)
 │   └── schemas.py            # Schémas Pydantic
 ├── docker-compose.yml
@@ -55,10 +56,9 @@ video-analyzer-workflow/
 
 **Fichier `.env` nécessaire :**
 ```env
-DATABASE_URL=postgresql+psycopg://app_user:app_password@db:5432/app_db
-REDIS_URL=redis://redis:6379/0
+DATABASE_URL=mongodb://mongo:27017
+
 OPENAI_API_KEY=votre_clé_openai_ici  # REQUIS
-SEARCH_API_KEY=votre_clé_serpapi_ici  # Optionnel pour l'instant
 ENV=development
 ```
 
@@ -94,7 +94,5 @@ curl -X POST http://localhost:8000/analyze \
 
 ### 🐛 Dépannage
 
-- Vérifier les logs : `docker compose logs -f api` ou `docker compose logs -f worker`
 - Vérifier que la DB est prête : `docker compose ps`
-- Vérifier que Redis fonctionne : Le worker Celery doit démarrer sans erreur
 

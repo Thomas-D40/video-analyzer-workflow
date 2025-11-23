@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 os.environ.setdefault("DATABASE_URL", "mongodb://localhost:27017")
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+
 
 app = FastAPI(
     title="YouTube Video Analyzer API",
