@@ -40,7 +40,7 @@ def extract_transcript(youtube_url: str) -> Optional[str]:
         'retries': 3,  # Nombre de tentatives en cas d'erreur
         'fragment_retries': 3,
         'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},  # Éviter certains formats problématiques
-        'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,  # Utiliser les cookies si disponibles
+        # 'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,  # Utiliser les cookies si disponibles
     }
     
     try:
