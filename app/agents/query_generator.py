@@ -36,7 +36,7 @@ def generate_search_queries(argument: str) -> Dict[str, str]:
     Génère trois requêtes de recherche :
     1. "arxiv": Mots-clés pour trouver des papiers scientifiques (Physique, CS, Math, Économie). 
        - Utilise des termes académiques précis en ANGLAIS.
-       - Maximum 3-5 mots-clés.
+       - Maximum 5-6 mots-clés.
        - Pas de "AND", "OR", juste les mots.
     
     2. "world_bank": Mots-clés pour trouver des indicateurs statistiques à la Banque Mondiale.

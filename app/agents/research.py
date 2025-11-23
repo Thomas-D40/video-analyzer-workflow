@@ -1,9 +1,3 @@
-"""
-Agent de recherche bibliographique et scientifique.
-
-Cet agent recherche des articles scientifiques, des études et des sources
-fiables pour chaque argument identifié dans la vidéo.
-"""
 from typing import List, Dict
 from duckduckgo_search import DDGS
 from ..config import get_settings
@@ -39,7 +33,7 @@ def search_literature(argument: str, max_results: int = 10) -> List[Dict[str, st
     
     for query in search_queries:
         try:
-            results = _search_with_ddg(query, max_results=5) # 5 résultats par requête
+            results = _search_with_ddg(query, max_results=10)
             for article in results:
                 if article["url"] not in seen_urls:
                     all_articles.append(article)
@@ -65,7 +59,7 @@ def _generate_search_queries(argument: str) -> List[str]:
     client = OpenAI(api_key=settings.openai_api_key)
     
     prompt = f"""Tu es un expert en recherche d'information scientifique et fact-checking.
-Ton but est de transformer un argument complexe en 2-3 requêtes de recherche optimisées pour trouver des sources FIABLES (études, statistiques, consensus scientifique).
+Ton but est de transformer un argument complexe en 4-5 requêtes de recherche optimisées pour trouver des sources FIABLES (études, statistiques, consensus scientifique).
 
 Argument: "{argument}"
 

@@ -1,12 +1,3 @@
-"""
-Agent d'extraction des arguments pour et contre depuis les articles scientifiques.
-
-Cet agent analyse les articles trouvés pour chaque argument et extrait
-les points qui soutiennent ou contredisent l'argument, avec citation des sources.
-
-Utilise MCP pour réduire la consommation de tokens en utilisant des résumés
-d'articles plutôt que les snippets complets.
-"""
 from typing import List, Dict
 import json
 import hashlib

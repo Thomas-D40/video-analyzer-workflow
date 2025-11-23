@@ -75,7 +75,7 @@ def _generate_arxiv_keywords(argument: str) -> str:
     
     prompt = f"""You are a scientific research assistant.
 Transform the following argument (in French) into a single ArXiv search query using English keywords.
-The query should consist of 3-5 key terms separated by AND/OR operators.
+The query should consist of 5-6 key terms separated by AND/OR operators.
 Focus on the core scientific concepts.
 
 Argument: "{argument}"
@@ -86,7 +86,7 @@ Example: {{"query": "water pollution AND nitrates AND health effects"}}
 
     try:
         response = client.chat.completions.create(
-            model=settings.openai_model,
+            model=settings.openai_smart_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             response_format={"type": "json_object"}

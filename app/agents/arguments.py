@@ -41,8 +41,8 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
 
     # Troncature simple de la transcription pour éviter de dépasser les limites de tokens
     # On garde les 15000 premiers caractères (environ 3-4k tokens)
-    optimized_transcript = transcript_text[:15000]
-    if len(transcript_text) > 15000:
+    optimized_transcript = transcript_text[:25000]
+    if len(transcript_text) > 25000:
         optimized_transcript += f"\n\n[Note: Transcription complète de {len(transcript_text)} caractères]"
     
     # Initialisation du client OpenAI sans paramètres de proxy

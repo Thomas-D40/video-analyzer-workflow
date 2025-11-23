@@ -96,7 +96,7 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
             print(f"[DEBUG workflow] Recherche Web avec requête: '{web_query}'")
             
             # On récupère plus de résultats pour avoir le choix
-            raw_web_articles = search_literature(web_query, max_results=5)
+            raw_web_articles = search_literature(web_query, max_results=10)
             print(f"[DEBUG workflow] Articles Web trouvés (brut): {len(raw_web_articles)}")
             
             # Filtrage par pertinence : garde les 2 meilleurs résultats
@@ -104,7 +104,7 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
                 argument_text, 
                 raw_web_articles, 
                 min_score=0.1,  # Assoupli à 10% pour éviter de tout filtrer
-                max_results=2
+                max_results=5
             )
             print(f"[DEBUG workflow] Articles Web après filtrage: {len(web_articles)}")
         except Exception as e:
@@ -115,7 +115,7 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
         try:
             arxiv_query = queries.get("arxiv", "")
             print(f"[DEBUG workflow] Recherche ArXiv avec requête: '{arxiv_query}'")
-            science_articles = search_arxiv(arxiv_query, max_results=3) if arxiv_query else []
+            science_articles = search_arxiv(arxiv_query, max_results=5) if arxiv_query else []
             print(f"[DEBUG workflow] Articles ArXiv trouvés: {len(science_articles)}")
         except Exception as e:
             print(f"[ERROR workflow] Erreur recherche ArXiv: {e}")
