@@ -40,6 +40,7 @@ def extract_transcript(youtube_url: str) -> Optional[str]:
         'retries': 3,  # Nombre de tentatives en cas d'erreur
         'fragment_retries': 3,
         'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},  # Éviter certains formats problématiques
+        'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,  # Utiliser les cookies si disponibles
     }
     
     try:
@@ -128,6 +129,7 @@ def extract_transcript(youtube_url: str) -> Optional[str]:
                     'retries': 2,
                     'fragment_retries': 2,
                     'outtmpl': os.path.join(tmpdir, '%(id)s.%(ext)s'),
+                    'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,
                 }
                 with yt_dlp.YoutubeDL(sub_opts) as sub_ydl:
                     try:
@@ -165,6 +167,7 @@ def extract_transcript(youtube_url: str) -> Optional[str]:
                             'retries': 2,
                             'fragment_retries': 2,
                             'outtmpl': os.path.join(tmpdir, 'subtitle.%(ext)s'),
+                            'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,
                         }
                         with yt_dlp.YoutubeDL(sub_opts) as sub_ydl:
                             try:
@@ -201,6 +204,7 @@ def extract_transcript(youtube_url: str) -> Optional[str]:
                             'retries': 2,
                             'fragment_retries': 2,
                             'outtmpl': os.path.join(tmpdir, 'subtitle.%(ext)s'),
+                            'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,
                         }
                         with yt_dlp.YoutubeDL(sub_opts) as sub_ydl:
                             try:
