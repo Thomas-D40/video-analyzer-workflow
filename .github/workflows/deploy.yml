@@ -1,0 +1,40 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            # Stop execution on error
+            set -e
+            
+            # Navigate to project directory
+            # Assumes the repo is already cloned at this location
+            # If not, you might need to clone it first manually or add logic here
+            cd /opt/video-analyzer
+            
+            # Pull latest changes
+            git pull origin main
+            
+            # Create .env file from secrets
+            echo "ENV=production" > .env
+            echo "DATABASE_URL=mongodb://mongo:27017" >> .env
+            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+            
+            # Build and start containers
+            docker compose up -d --build --remove-orphans
+            
+            # Clean up unused images to save space
+            docker image prune -f

@@ -67,6 +67,33 @@ Réponse attendue:
 
   - `OPENAI_API_KEY` (ou autre LLM provider)
 
+## Déploiement Automatique (CI/CD)
+
+Le projet utilise GitHub Actions pour le déploiement automatique sur le VPS.
+
+### Configuration des Secrets GitHub
+
+Pour que le déploiement fonctionne, vous devez ajouter les "Repository secrets" suivants dans votre dépôt GitHub (Settings > Secrets and variables > Actions) :
+
+| Nom du Secret | Description |
+|---------------|-------------|
+| `VPS_HOST` | Adresse IP de votre VPS |
+| `VPS_USER` | Nom d'utilisateur SSH (ex: `root`) |
+| `VPS_SSH_KEY` | Votre clé privée SSH (le contenu du fichier `.pem` ou `id_rsa`) |
+| `OPENAI_API_KEY` | Votre clé API OpenAI pour la production |
+
+### Premier Déploiement
+
+Pour la première installation sur le VPS, connectez-vous manuellement et clonez le dépôt :
+
+```bash
+# Sur le VPS
+mkdir -p /opt/video-analyzer
+git clone https://github.com/Thomas-D40/video-analyzer-workflow.git /opt/video-analyzer
+cd /opt/video-analyzer
+# Le premier déploiement se fera ensuite automatiquement au prochain push
+```
+
 ## Objectif fonctionnel
 - Requête HTTP avec `youtube_url`
 - Vérification en DB par `video_id`
