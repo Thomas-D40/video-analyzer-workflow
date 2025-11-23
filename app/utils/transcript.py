@@ -45,14 +45,13 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
     ydl_opts = {
         'writesubtitles': True,
         'writeautomaticsub': True,
-        'subtitleslangs': ['fr', 'en', 'fr-FR', 'en-US', 'en-GB'],  # Plus de variantes
-        'skip_download': True,  # On ne télécharge pas la vidéo
+        'subtitleslangs': ['fr', 'en', 'fr-FR', 'en-US', 'en-GB'],
+        'skip_download': True,
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': False,
-        'retries': 3,  # Nombre de tentatives en cas d'erreur
+        'retries': 3,
         'fragment_retries': 3,
-        'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},  # Éviter certains formats problématiques
         'cookiefile': cookie_file_path if cookie_file_path else ('/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None),
     }
     

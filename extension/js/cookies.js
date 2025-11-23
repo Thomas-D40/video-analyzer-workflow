@@ -8,12 +8,14 @@
  */
 export async function getYouTubeCookies() {
     try {
-        // Récupérer tous les cookies YouTube
         const cookies = await chrome.cookies.getAll({
             domain: '.youtube.com'
         });
 
+        console.log('[Cookies] Raw cookies from Chrome API:', cookies);
+
         if (!cookies || cookies.length === 0) {
+            console.warn('[Cookies] No YouTube cookies found. Are you logged in to YouTube?');
             return null;
         }
 
