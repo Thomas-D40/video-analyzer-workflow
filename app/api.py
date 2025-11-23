@@ -7,7 +7,7 @@ et retourne l'analyse complète (arguments, sources, scores).
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import os
 import logging
 
