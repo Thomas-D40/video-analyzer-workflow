@@ -11,6 +11,8 @@ pydantic-settings==2.6.1
 
 # YouTube & Transcription
 yt-dlp==2024.10.22
+youtube-transcript-api==0.6.2
+
 
 # AI & LLM
 openai==1.51.0

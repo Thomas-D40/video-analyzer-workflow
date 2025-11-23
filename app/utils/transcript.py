@@ -1,25 +1,28 @@
 """
 Utilitaire pour extraire la transcription d'une vidéo YouTube.
 
-Utilise yt-dlp avec une stratégie en 2 phases pour gérer les cookies :
-- Phase 1 : Extraction des métadonnées SANS cookies
-- Phase 2 : Téléchargement des sous-titres AVEC cookies
+Utilise youtube-transcript-api comme méthode principale (plus fiable),
+avec yt-dlp comme fallback.
 """
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 import yt_dlp
 from typing import Optional
 import tempfile
 import os
 import re
 import uuid
+import json
 
 
 def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optional[str]:
     """
     Extrait la transcription d'une vidéo YouTube.
     
-    Stratégie en 2 phases pour éviter l'erreur "Requested format is not available" :
-    1. Récupérer les métadonnées et URLs de sous-titres SANS cookies
-    2. Télécharger les sous-titres AVEC cookies si fournis
+    Stratégie :
+    1. Créer un fichier de cookies temporaire si fourni
+    2. Essayer youtube-transcript-api (avec cookies)
+    3. Si échec, essayer yt-dlp (avec cookies)
     
     Args:
         youtube_url: URL complète de la vidéo YouTube
@@ -39,220 +42,170 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         except Exception as e:
             print(f"[WARN] Failed to create cookie file: {e}")
             cookie_file_path = None
-    
+            
     try:
-        # PHASE 1: Extraction des métadonnées SANS cookies
-        # Cela évite l'erreur "Requested format is not available"
-        print("[INFO] Phase 1: Extracting metadata without cookies")
+        # Extraire l'ID de la vidéo
+        video_id = _extract_video_id(youtube_url)
+        if not video_id:
+            print("[ERROR] Impossible d'extraire l'ID de la vidéo")
+            return None
+
+        # Méthode 1: youtube-transcript-api
+        try:
+            print(f"[INFO] Tentative youtube-transcript-api pour {video_id} (cookies={bool(cookie_file_path)})")
+            
+            # On passe le chemin du fichier de cookies s'il existe
+            # Note: youtube-transcript-api attend un chemin de fichier pour 'cookies'
+            transcript_list = YouTubeTranscriptApi.get_transcript(
+                video_id,
+                languages=['fr', 'en', 'fr-FR', 'en-US', 'en-GB'],
+                cookies=cookie_file_path if cookie_file_path else None
+            )
+            
+            # Assembler le texte
+            transcript_text = ' '.join([entry['text'] for entry in transcript_list])
+            
+            if transcript_text and len(transcript_text.strip()) > 100:
+                print(f"[INFO] Succès youtube-transcript-api ({len(transcript_text)} chars)")
+                return transcript_text.strip()
+                
+        except Exception as e:
+            print(f"[WARN] Echec youtube-transcript-api: {e}")
+            # On continue vers le fallback yt-dlp
+            
+        # Méthode 2: yt-dlp (Fallback)
+        print(f"[INFO] Tentative fallback yt-dlp pour {youtube_url}")
+        return _extract_transcript_ytdlp(youtube_url, cookie_file_path)
         
-        metadata_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'skip_download': True,
-            'extract_flat': False,  # On veut les métadonnées complètes
-        }
-        
-        with yt_dlp.YoutubeDL(metadata_opts) as ydl:
-            info = ydl.extract_info(youtube_url, download=False)
-        
-        # Récupérer les URLs des sous-titres depuis les métadonnées
-        subtitles_data = info.get('subtitles', {})
-        automatic_captions = info.get('automatic_captions', {})
-        
-        # PHASE 2: Téléchargement des sous-titres AVEC cookies si disponibles
-        print(f"[INFO] Phase 2: Downloading subtitles WITH cookies={bool(cookie_file_path)}")
-        
-        # Prioriser les sous-titres manuels
-        all_subtitles = [
-            ('manual', subtitles_data),
-            ('auto', automatic_captions)
-        ]
-        
-        for subtitle_type, subs in all_subtitles:
-            for lang in ['fr', 'en', 'fr-FR', 'en-US', 'en-GB']:
-                if lang in subs:
-                    # Récupérer l'URL du sous-titre
-                    subtitle_info = subs[lang]
-                    if isinstance(subtitle_info, list) and len(subtitle_info) > 0:
-                        subtitle_info = subtitle_info[0]
-                    
-                    subtitle_url = None
-                    if isinstance(subtitle_info, dict):
-                        subtitle_url = subtitle_info.get('url')
-                    elif isinstance(subtitle_info, str):
-                        subtitle_url = subtitle_info
-                    
-                    if subtitle_url:
-                        # Télécharger le sous-titre avec cookies si disponibles
-                        transcript = _download_subtitle_with_cookies(
-                            subtitle_url, 
-                            cookie_file_path
-                        )
-                        
-                        if transcript and len(transcript.strip()) > 100:
-                            print(f"[INFO] Successfully extracted {subtitle_type} subtitle in {lang}")
-                            return transcript.strip()
-        
-        # Si aucun sous-titre trouvé via URLs, essayer la méthode de téléchargement direct
-        print("[INFO] Trying direct subtitle download with yt-dlp")
-        return _download_subtitles_direct(youtube_url, cookie_file_path)
-        
-    except Exception as e:
-        print(f"Erreur lors de l'extraction de la transcription: {e}")
-        return None
     finally:
-        # Nettoyer le fichier de cookies
+        # Nettoyage du fichier cookies
         if cookie_file_path and os.path.exists(cookie_file_path):
             try:
                 os.remove(cookie_file_path)
-                print(f"[DEBUG] Cookie file cleaned up")
+                print("[DEBUG] Cookie file cleaned up")
             except Exception as e:
                 print(f"[WARN] Failed to cleanup cookie file: {e}")
 
 
-def _download_subtitle_with_cookies(subtitle_url: str, cookie_file: str = None) -> Optional[str]:
+def _extract_video_id(youtube_url: str) -> Optional[str]:
+    """Extrait l'ID de la vidéo depuis une URL YouTube."""
+    patterns = [
+        r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
+        r'(?:embed\/)([0-9A-Za-z_-]{11})',
+        r'^([0-9A-Za-z_-]{11})$'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, youtube_url)
+        if match:
+            return match.group(1)
+    
+    return None
+
+
+def _extract_transcript_ytdlp(youtube_url: str, cookie_file: str = None) -> Optional[str]:
     """
-    Télécharge un sous-titre depuis une URL avec cookies si fournis.
+    Fallback: extraction via yt-dlp avec stratégie en 2 phases.
     """
     try:
-        import urllib.request
+        # Phase 1: Métadonnées SANS cookies (pour éviter erreur format)
+        ydl_opts_info = {
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+        }
         
-        req = urllib.request.Request(subtitle_url)
-        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-        
-        # Si on a des cookies, les ajouter au header
-        if cookie_file and os.path.exists(cookie_file):
-            # Lire les cookies et les convertir en header Cookie
-            with open(cookie_file, 'r') as f:
-                cookie_lines = f.readlines()
+        with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
             
-            # Parser les cookies Netscape et créer le header Cookie
-            cookies = []
-            for line in cookie_lines:
-                if line.strip() and not line.startswith('#'):
-                    parts = line.strip().split('\t')
-                    if len(parts) >= 7:
-                        name = parts[5]
-                        value = parts[6]
-                        cookies.append(f"{name}={value}")
-            
-            if cookies:
-                req.add_header('Cookie', '; '.join(cookies))
-                print(f"[DEBUG] Added {len(cookies)} cookies to request")
+        # Phase 2: Téléchargement sous-titres AVEC cookies
+        subtitles_data = info.get('subtitles', {})
+        automatic_captions = info.get('automatic_captions', {})
         
-        with urllib.request.urlopen(req, timeout=10) as response:
-            content = response.read().decode('utf-8', errors='ignore')
+        all_subtitles = [('manual', subtitles_data), ('auto', automatic_captions)]
         
-        return _parse_subtitle_content(content)
+        for _, subs in all_subtitles:
+            for lang in ['fr', 'en', 'fr-FR', 'en-US', 'en-GB']:
+                if lang in subs:
+                    subtitle_info = subs[lang]
+                    if isinstance(subtitle_info, list) and subtitle_info:
+                        subtitle_info = subtitle_info[0]
+                        
+                    url = subtitle_info.get('url') if isinstance(subtitle_info, dict) else subtitle_info
+                    
+                    if url:
+                        # Télécharger avec cookies
+                        transcript = _download_subtitle_url(url, cookie_file)
+                        if transcript:
+                            return transcript
+                            
+        return None
         
     except Exception as e:
-        print(f"[WARN] Failed to download subtitle: {e}")
+        print(f"[ERROR] yt-dlp fallback failed: {e}")
         return None
 
 
-def _download_subtitles_direct(youtube_url: str, cookie_file: str = None) -> Optional[str]:
-    """
-    Télécharge les sous-titres directement avec yt-dlp.
-    Utilise les cookies si fournis.
-    """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        download_opts = {
-            'writesubtitles': True,
-            'writeautomaticsub': True,
-            'subtitleslangs': ['fr', 'en'],
-            'skip_download': True,
-            'quiet': True,
-            'no_warnings': True,
-            'outtmpl': os.path.join(tmpdir, '%(id)s.%(ext)s'),
-        }
+def _download_subtitle_url(url: str, cookie_file: str = None) -> Optional[str]:
+    """Télécharge et parse un sous-titre depuis son URL."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
         
-        # Ajouter le cookiefile seulement pour le téléchargement
         if cookie_file and os.path.exists(cookie_file):
-            download_opts['cookiefile'] = cookie_file
-            print("[DEBUG] Using cookies for subtitle download")
+            with open(cookie_file, 'r') as f:
+                # Conversion basique Netscape -> Header Cookie
+                cookies = []
+                for line in f:
+                    if line.strip() and not line.startswith('#'):
+                        parts = line.strip().split('\t')
+                        if len(parts) >= 7:
+                            cookies.append(f"{parts[5]}={parts[6]}")
+                if cookies:
+                    req.add_header('Cookie', '; '.join(cookies))
         
-        try:
-            with yt_dlp.YoutubeDL(download_opts) as ydl:
-                ydl.download([youtube_url])
+        with urllib.request.urlopen(req, timeout=10) as response:
+            content = response.read().decode('utf-8', errors='ignore')
             
-            # Chercher les fichiers de sous-titres
-            for file in os.listdir(tmpdir):
-                if file.endswith(('.vtt', '.srt', '.ttml')):
-                    filepath = os.path.join(tmpdir, file)
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    
-                    transcript = _parse_subtitle_content(content)
-                    if transcript and len(transcript.strip()) > 100:
-                        return transcript.strip()
-        
-        except Exception as e:
-            print(f"[WARN] Direct download failed: {e}")
-        
+        return _parse_subtitle_content(content)
+    except Exception:
         return None
 
 
 def _parse_subtitle_content(content: str) -> Optional[str]:
-    """Parse le contenu d'un fichier de sous-titres."""
+    """Parse le contenu (JSON, XML, VTT, SRT)."""
     try:
-        content_stripped = content.strip()
+        content = content.strip()
         
-        # Format VTT
-        if 'WEBVTT' in content_stripped[:100]:
-            lines = content.split('\n')
-            text_lines = []
+        # JSON (YouTube format)
+        if content.startswith(('[', '{')):
+            try:
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    events = data.get('events', []) or data.get('segments', [])
+                    parts = []
+                    for e in events:
+                        segs = e.get('segs', [])
+                        if segs:
+                            parts.extend([s.get('utf8', '') for s in segs if 'utf8' in s])
+                    return ' '.join(parts).strip()
+            except:
+                pass
+
+        # XML/TTML
+        if content.startswith(('<', '<?xml')):
+            text = re.sub(r'<[^>]+>', ' ', content)
+            return ' '.join(text.split()).strip()
             
-            for line in lines:
-                line = line.strip()
-                # Ignorer les lignes de timing et les lignes vides
-                if not line or 'WEBVTT' in line or '-->' in line:
-                    continue
-                if not re.match(r'^\d{2}:\d{2}', line) and not line.isdigit():
-                    # Nettoyer les balises HTML
-                    line = re.sub(r'<[^>]+>', '', line)
-                    if line:
-                        text_lines.append(line)
-            
-            result = ' '.join(text_lines)
-            result = re.sub(r'\s+', ' ', result).strip()
-            return result if result else None
+        # VTT / SRT
+        lines = content.splitlines()
+        text_parts = []
+        for line in lines:
+            if '-->' in line or not line.strip() or line.strip().isdigit() or 'WEBVTT' in line:
+                continue
+            text_parts.append(line.strip())
+        return ' '.join(text_parts).strip()
         
-        # Format SRT
-        if re.search(r'\d+\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}', content):
-            lines = content.split('\n')
-            text_lines = []
-            
-            for line in lines:
-                line = line.strip()
-                # Ignorer les numéros de séquence et les timestamps
-                if not line or line.isdigit() or '-->' in line:
-                    continue
-                text_lines.append(line)
-            
-            result = ' '.join(text_lines)
-            result = re.sub(r'\s+', ' ', result).strip()
-            return result if result else None
-        
-        # Format TTML/XML
-        if content_stripped.startswith('<?xml') or content_stripped.startswith('<tt'):
-            text_matches = re.findall(r'<p[^>]*>(.*?)</p>', content, re.DOTALL | re.IGNORECASE)
-            if not text_matches:
-                text_matches = re.findall(r'<span[^>]*>(.*?)</span>', content, re.DOTALL | re.IGNORECASE)
-            
-            if text_matches:
-                text_parts = []
-                for match in text_matches:
-                    clean_text = re.sub(r'<[^>]+>', '', match)
-                    clean_text = clean_text.strip()
-                    if clean_text:
-                        text_parts.append(clean_text)
-                
-                result = ' '.join(text_parts)
-                result = re.sub(r'\s+', ' ', result).strip()
-                return result if result else None
-        
-        return None
-        
-    except Exception as e:
-        print(f"[WARN] Failed to parse subtitle: {e}")
+    except:
         return None

@@ -1,4 +1,17 @@
 /**
+ * Module API - Communication avec le backend
+ */
+
+import { getCurrentApiKey } from './auth.js';
+import { getYouTubeCookies } from './cookies.js';
+
+const API_URL = 'http://46.202.128.11:8000/api/analyze'; // Remplacer <VOTRE_IP_VPS> par l'IP réelle
+
+/**
+ * Analyse une vidéo YouTube
+ * @param {string} url - URL de la vidéo YouTube
+ * @param {boolean} forceRefresh - Force une nouvelle analyse (ignore le cache)
+ * @returns {Promise<Object>} - Données de l'analyse
  */
 export async function analyzeVideo(url, forceRefresh = false) {
     const headers = { 'Content-Type': 'application/json' };
@@ -11,7 +24,6 @@ export async function analyzeVideo(url, forceRefresh = false) {
 
     // Extraire les cookies YouTube
     const youtubeCookies = await getYouTubeCookies();
-    console.log('[API] YouTube cookies:', youtubeCookies ? 'Present (' + youtubeCookies.length + ' chars)' : 'NULL');
 
     const response = await fetch(API_URL, {
         method: 'POST',
