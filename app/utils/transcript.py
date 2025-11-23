@@ -38,7 +38,14 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         try:
             with open(cookie_file_path, 'w') as f:
                 f.write(youtube_cookies)
-            print(f"[DEBUG] Cookie file created: {cookie_file_path}")
+            
+            # DEBUG: Vérifier le contenu du fichier
+            file_size = os.path.getsize(cookie_file_path)
+            print(f"[DEBUG] Cookie file created: {cookie_file_path} (Size: {file_size} bytes)")
+            with open(cookie_file_path, 'r') as f:
+                head = [next(f) for _ in range(5)]
+            print(f"[DEBUG] Cookie file head:\n{''.join(head)}")
+            
         except Exception as e:
             print(f"[WARN] Failed to create cookie file: {e}")
             cookie_file_path = None
@@ -55,7 +62,6 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
             print(f"[INFO] Tentative youtube-transcript-api pour {video_id} (cookies={bool(cookie_file_path)})")
             
             # On passe le chemin du fichier de cookies s'il existe
-            # Note: youtube-transcript-api attend un chemin de fichier pour 'cookies'
             transcript_list = YouTubeTranscriptApi.get_transcript(
                 video_id,
                 languages=['fr', 'en', 'fr-FR', 'en-US', 'en-GB'],
@@ -70,7 +76,9 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
                 return transcript_text.strip()
                 
         except Exception as e:
+            import traceback
             print(f"[WARN] Echec youtube-transcript-api: {e}")
+            print(f"[DEBUG] Traceback: {traceback.format_exc()}")
             # On continue vers le fallback yt-dlp
             
         # Méthode 2: yt-dlp (Fallback)
@@ -110,11 +118,13 @@ def _extract_transcript_ytdlp(youtube_url: str, cookie_file: str = None) -> Opti
     try:
         # Phase 1: Métadonnées SANS cookies (pour éviter erreur format)
         ydl_opts_info = {
-            'quiet': True,
-            'no_warnings': True,
+            'quiet': False,  # Enable logs
+            'verbose': True, # Enable verbose logs
+            'no_warnings': False,
             'skip_download': True,
         }
         
+        print("[DEBUG] Starting yt-dlp Phase 1 (Metadata)")
         with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
             info = ydl.extract_info(youtube_url, download=False)
             
@@ -134,15 +144,19 @@ def _extract_transcript_ytdlp(youtube_url: str, cookie_file: str = None) -> Opti
                     url = subtitle_info.get('url') if isinstance(subtitle_info, dict) else subtitle_info
                     
                     if url:
+                        print(f"[DEBUG] Found subtitle URL for {lang}, downloading...")
                         # Télécharger avec cookies
                         transcript = _download_subtitle_url(url, cookie_file)
                         if transcript:
                             return transcript
                             
+        print("[WARN] No suitable subtitles found in metadata")
         return None
         
     except Exception as e:
         print(f"[ERROR] yt-dlp fallback failed: {e}")
+        import traceback
+        print(traceback.format_exc())
         return None
 
 
