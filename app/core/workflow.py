@@ -26,7 +26,7 @@ from app.utils.report_formatter import generate_markdown_report
 
 from app.services.storage import save_analysis, get_analysis
 
-async def process_video(youtube_url: str, force_refresh: bool = False) -> Dict[str, Any]:
+async def process_video(youtube_url: str, force_refresh: bool = False, youtube_cookies: str = None) -> Dict[str, Any]:
     """
     Traite une vidéo YouTube et retourne l'analyse complète.
     
@@ -61,7 +61,7 @@ async def process_video(youtube_url: str, force_refresh: bool = False) -> Dict[s
             return result
 
     # Étape 2: Extraction de la transcription
-    transcript_text = extract_transcript(youtube_url)
+    transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)
     if not transcript_text or len(transcript_text.strip()) < 50:
         raise ValueError("Transcription introuvable ou trop courte")
     

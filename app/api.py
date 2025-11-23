@@ -46,6 +46,7 @@ class AnalyzeRequest(BaseModel):
     """Requête d'analyse de vidéo."""
     url: str
     force_refresh: bool = False
+    youtube_cookies: Optional[str] = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -85,7 +86,7 @@ async def analyze_video(request: AnalyzeRequest):
         HTTPException: Si l'URL est invalide ou le traitement échoue
     """
     try:
-        result = await process_video(request.url, force_refresh=request.force_refresh)
+        result = await process_video(request.url, force_refresh=request.force_refresh, youtube_cookies=request.youtube_cookies)
         
         return AnalyzeResponse(
             status="success",
