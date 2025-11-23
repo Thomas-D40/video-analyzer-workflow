@@ -13,16 +13,29 @@ import time
 import json
 
 
-def extract_transcript(youtube_url: str) -> Optional[str]:
+def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optional[str]:
     """
     Extrait la transcription d'une vidéo YouTube.
     
     Args:
         youtube_url: URL complète de la vidéo YouTube
+        youtube_cookies: Cookies YouTube au format Netscape (optionnel)
         
     Returns:
         Transcription sous forme de texte, ou None si indisponible
     """
+    # Créer un fichier temporaire pour les cookies si fournis
+    cookie_file_path = None
+    if youtube_cookies:
+        import uuid
+        cookie_file_path = f'/tmp/cookies_{uuid.uuid4().hex}.txt'
+        try:
+            with open(cookie_file_path, 'w') as f:
+                f.write(youtube_cookies)
+        except Exception as e:
+            print(f"Erreur lors de la création du fichier de cookies: {e}")
+            cookie_file_path = None
+    
     # Configuration yt-dlp pour extraire uniquement la transcription
     # On supprime les warnings en redirigeant les logs
     import logging
@@ -40,7 +53,7 @@ def extract_transcript(youtube_url: str) -> Optional[str]:
         'retries': 3,  # Nombre de tentatives en cas d'erreur
         'fragment_retries': 3,
         'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},  # Éviter certains formats problématiques
-        'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,  # Utiliser les cookies si disponibles
+        'cookiefile': cookie_file_path if cookie_file_path else ('/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None),
     }
     
     try:

@@ -3,6 +3,7 @@
  */
 
 import { getCurrentApiKey } from './auth.js';
+import { getYouTubeCookies } from './cookies.js';
 
 const API_URL = 'http://46.202.128.11:8000/api/analyze'; // Remplacer <VOTRE_IP_VPS> par l'IP réelle
 
@@ -21,12 +22,16 @@ export async function analyzeVideo(url, forceRefresh = false) {
         headers['X-API-Key'] = apiKey;
     }
 
+    // Extraire les cookies YouTube
+    const youtubeCookies = await getYouTubeCookies();
+
     const response = await fetch(API_URL, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
             url: url,
-            force_refresh: forceRefresh
+            force_refresh: forceRefresh,
+            youtube_cookies: youtubeCookies  // Ajouter les cookies dans le body
         })
     });
 
