@@ -113,22 +113,29 @@ def _extract_video_id(youtube_url: str) -> Optional[str]:
 
 def _extract_transcript_ytdlp(youtube_url: str, cookie_file: str = None) -> Optional[str]:
     """
-    Fallback: extraction via yt-dlp avec stratégie en 2 phases.
+    Fallback: extraction via yt-dlp avec stratégie améliorée.
     """
     try:
-        # Phase 1: Métadonnées SANS cookies (pour éviter erreur format)
+        # Phase 1: Récupérer les infos AVEC cookies
+        # On utilise 'listsubtitles': True pour éviter que yt-dlp ne cherche à valider les formats vidéo
+        # ce qui causait l'erreur "Requested format is not available"
         ydl_opts_info = {
-            'quiet': False,  # Enable logs
-            'verbose': True, # Enable verbose logs
+            'quiet': False,
+            'verbose': True,
             'no_warnings': False,
             'skip_download': True,
+            'listsubtitles': True,  # Clé pour éviter la validation des formats vidéo
+            'cookiefile': cookie_file if cookie_file and os.path.exists(cookie_file) else None
         }
         
-        print("[DEBUG] Starting yt-dlp Phase 1 (Metadata)")
+        print(f"[DEBUG] Starting yt-dlp Phase 1 (Metadata) with cookies={bool(cookie_file)}")
         with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
+            # extract_info avec download=False et listsubtitles=True devrait retourner les infos
+            # sans planter sur les formats vidéo
             info = ydl.extract_info(youtube_url, download=False)
             
-        # Phase 2: Téléchargement sous-titres AVEC cookies
+        # Phase 2: Téléchargement sous-titres
+        # Note: info contient maintenant les sous-titres grâce à listsubtitles
         subtitles_data = info.get('subtitles', {})
         automatic_captions = info.get('automatic_captions', {})
         
