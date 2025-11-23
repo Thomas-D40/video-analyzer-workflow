@@ -26,7 +26,7 @@ from app.utils.report_formatter import generate_markdown_report
 
 from app.services.storage import save_analysis, get_analysis
 
-async def process_video(youtube_url: str, force_refresh: bool = False, youtube_cookies: str = None) -> Dict[str, Any]:
+async def process_video(youtube_url: str, force_refresh: bool = False) -> Dict[str, Any]:
     """
     Traite une vidéo YouTube et retourne l'analyse complète.
     
@@ -54,20 +54,6 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
         cached_analysis = await get_analysis(video_id)
         if cached_analysis and cached_analysis.status == "completed":
             print(f"[INFO] Analyse trouvée en cache pour {video_id}")
-            result = cached_analysis.content
-            # On ajoute les métadonnées de cache
-            result["cached"] = True
-            result["last_updated"] = cached_analysis.updated_at.isoformat()
-            return result
-
-    # Étape 2: Extraction de la transcription
-    transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)
-    if not transcript_text or len(transcript_text.strip()) < 50:
-        raise ValueError("Transcription introuvable ou trop courte")
-    
-    # Étape 3: Extraction des arguments
-    arguments = extract_arguments(transcript_text, video_id=video_id)
-    if not arguments:
         return {
             "video_id": video_id,
             "youtube_url": youtube_url,
