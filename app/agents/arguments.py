@@ -39,8 +39,7 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
         # Si la transcription est trop courte ou vide, on retourne une liste vide
         return []
 
-    # Troncature simple de la transcription pour éviter de dépasser les limites de tokens
-    # On garde les 15000 premiers caractères (environ 3-4k tokens)
+
     optimized_transcript = transcript_text[:25000]
     if len(transcript_text) > 25000:
         optimized_transcript += f"\n\n[Note: Transcription complète de {len(transcript_text)} caractères]"
@@ -56,24 +55,17 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
         if var in os.environ:
             saved_proxy_vars[var] = os.environ.pop(var)
     
-    # Essayer de créer le client avec httpx personnalisé (sans proxy)
     try:
         import httpx
-        # Créer un client HTTP sans proxy explicite
-        # httpx n'utilisera pas les proxies si on ne les spécifie pas
         http_client = httpx.Client(timeout=60.0)
         client = OpenAI(
             api_key=settings.openai_api_key,
             http_client=http_client
         )
     except (ImportError, TypeError, AttributeError) as e:
-        # Fallback : créer le client OpenAI normalement
-        # Les variables de proxy sont déjà supprimées de l'environnement
         try:
             client = OpenAI(api_key=settings.openai_api_key)
         except TypeError as te:
-            # Si l'erreur persiste, essayer sans aucun paramètre optionnel
-            # Certaines versions d'OpenAI peuvent avoir des problèmes
             import inspect
             sig = inspect.signature(OpenAI.__init__)
             params = {}
@@ -81,7 +73,6 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
                 params['api_key'] = settings.openai_api_key
             client = OpenAI(**params)
     finally:
-        # Restaurer les variables d'environnement après création du client
         for var, value in saved_proxy_vars.items():
             os.environ[var] = value
     
@@ -156,18 +147,16 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
         content = response.choices[0].message.content
         parsed = json.loads(content)
         
-        # Extraction de la liste d'arguments depuis l'objet JSON
+
         if isinstance(parsed, dict) and "arguments" in parsed:
             arguments = parsed["arguments"]
         elif isinstance(parsed, list):
-            # Fallback: si c'est une liste directe (format non standard mais on le gère)
             arguments = parsed
         else:
-            # Format inattendu
             print(f"Format de réponse inattendu: {type(parsed)}")
             arguments = []
         
-        # Validation et nettoyage des résultats
+
         validated_arguments = []
         for arg in arguments:
             if isinstance(arg, dict) and "argument" in arg and "stance" in arg:
