@@ -47,13 +47,12 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         'writeautomaticsub': True,
         'subtitleslangs': ['fr', 'en', 'fr-FR', 'en-US', 'en-GB'],
         'skip_download': True,
-        'format': 'worst',  # Format le plus léger pour éviter les erreurs
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': False,
         'retries': 3,
         'fragment_retries': 3,
-        'cookiefile': cookie_file_path if cookie_file_path else ('/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None),
+        'cookiefile': cookie_file_path,  # Utiliser uniquement les cookies transmis
     }
     
     try:
