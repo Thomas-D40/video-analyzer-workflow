@@ -59,7 +59,14 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
     print(f"[DEBUG] yt-dlp config: cookiefile={cookie_file_path}")
     
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        # Première passe : récupérer les infos SANS cookies pour éviter l'erreur de format
+        ydl_opts_info = {
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
             # Récupération des informations de la vidéo
             info = ydl.extract_info(youtube_url, download=False)
             
@@ -138,18 +145,6 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
                     'writesubtitles': True,
                     'writeautomaticsub': True,
                     'subtitleslangs': ['fr', 'en'],  # Limiter pour éviter trop de requêtes
-                    'skip_download': True,
-                    'quiet': True,
-                    'no_warnings': True,
-                    'retries': 2,
-                    'fragment_retries': 2,
-                    'outtmpl': os.path.join(tmpdir, '%(id)s.%(ext)s'),
-                    'cookiefile': '/app/cookies.txt' if os.path.exists('/app/cookies.txt') else None,
-                }
-                with yt_dlp.YoutubeDL(sub_opts) as sub_ydl:
-                    try:
-                        sub_ydl.download([youtube_url])
-                        # Chercher tous les fichiers de sous-titres générés
                         for file in os.listdir(tmpdir):
                             if file.endswith(('.vtt', '.srt', '.ttml')):
                                 sub_file = os.path.join(tmpdir, file)
