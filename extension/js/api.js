@@ -24,6 +24,7 @@ export async function analyzeVideo(url, forceRefresh = false) {
 
     // Extraire les cookies YouTube
     const youtubeCookies = await getYouTubeCookies();
+    console.log('[API] YouTube cookies:', youtubeCookies ? 'Present (' + youtubeCookies.length + ' chars)' : 'NULL');
 
     const response = await fetch(API_URL, {
         method: 'POST',
