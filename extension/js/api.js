@@ -4,7 +4,7 @@
 
 import { getCurrentApiKey } from './auth.js';
 
-const API_URL = 'http://localhost:8000/api/analyze';
+const API_URL = 'http://46.202.128.11:8000/api/analyze'; // Remplacer <VOTRE_IP_VPS> par l'IP réelle
 
 /**
  * Analyse une vidéo YouTube

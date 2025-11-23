@@ -7,6 +7,7 @@ services:
       - ENV=development
       - DATABASE_URL=mongodb://mongo:27017
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ALLOWED_API_KEYS=${ALLOWED_API_KEYS:-}
     ports:
       - "8000:8000"
     volumes:

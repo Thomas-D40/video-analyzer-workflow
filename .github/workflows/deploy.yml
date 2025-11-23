@@ -32,6 +32,7 @@ jobs:
             echo "ENV=production" > .env
             echo "DATABASE_URL=mongodb://mongo:27017" >> .env
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+            echo "ALLOWED_API_KEYS=${{ secrets.ALLOWED_API_KEYS }}" >> .env
             
             # Build and start containers
             docker compose up -d --build --remove-orphans

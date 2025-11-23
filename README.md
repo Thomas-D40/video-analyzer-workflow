@@ -81,6 +81,7 @@ Pour que le déploiement fonctionne, vous devez ajouter les "Repository secrets"
 | `VPS_USER` | Nom d'utilisateur SSH (ex: `root`) |
 | `VPS_SSH_KEY` | Votre clé privée SSH (le contenu du fichier `.pem` ou `id_rsa`) |
 | `OPENAI_API_KEY` | Votre clé API OpenAI pour la production |
+| `ALLOWED_API_KEYS` | Clés API autorisées pour les utilisateurs (séparées par des virgules) |
 
 ### Premier Déploiement
 
