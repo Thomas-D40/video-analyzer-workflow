@@ -81,12 +81,14 @@ Réponds en JSON avec ce format exact:
 
 Si aucun article ne contient d'informations pertinentes, retourne des listes vides."""
 
+
     user_prompt = f"""Argument à analyser: {argument}
 
 Articles scientifiques:
 {articles_context}
 
 Analyse ces articles et extrais les points pour (pros) et contre (cons) cet argument."""
+
 
     try:
         response = client.chat.completions.create(

@@ -40,7 +40,6 @@ video-analyzer-workflow/
 │   │   ├── youtube.py        # Extraction video_id
 │   │   └── transcript.py    # Extraction transcription
 │   ├── main.py              # API FastAPI
-
 │   ├── models.py             # Modèles Pydantic
 │   ├── db/
 │       └── mongo.py          # Configuration MongoDB
@@ -57,7 +56,6 @@ video-analyzer-workflow/
 **Fichier `.env` nécessaire :**
 ```env
 DATABASE_URL=mongodb://mongo:27017
-
 OPENAI_API_KEY=votre_clé_openai_ici  # REQUIS
 ENV=development
 ```
@@ -93,6 +91,5 @@ curl -X POST http://localhost:8000/analyze \
 - `GET /docs` - Documentation Swagger de l'API
 
 ### 🐛 Dépannage
-
 - Vérifier que la DB est prête : `docker compose ps`
 
