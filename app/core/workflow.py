@@ -14,13 +14,14 @@ from typing import Dict, List, Any
 
 from app.utils.youtube import extract_video_id
 from app.utils.transcript import extract_transcript
-from app.agents.arguments import extract_arguments
-from app.agents.research import search_literature
-from app.agents.query_generator import generate_search_queries
-from app.agents.scientific_research import search_arxiv
-from app.agents.statistical_research import search_world_bank_data
-from app.agents.pros_cons import extract_pros_cons
-from app.agents.aggregate import aggregate_results
+from app.agents.extraction import extract_arguments
+from app.agents.research import (
+    search_literature,
+    generate_search_queries,
+    search_arxiv,
+    search_world_bank_data,
+)
+from app.agents.analysis import extract_pros_cons, aggregate_results
 from app.utils.report_formatter import generate_markdown_report
 
 

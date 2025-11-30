@@ -64,8 +64,35 @@ Réponse attendue:
 ## Configuration
 - Variables dans `.env` (voir `.env.example`):
   - `DATABASE_URL`
-
   - `OPENAI_API_KEY` (ou autre LLM provider)
+
+## Development Workflow
+
+### Working Across Machines
+
+This project uses Git for synchronization:
+
+```bash
+# Commit your changes
+git add .
+git commit -m "Description of changes"
+
+# Push to remote
+git push origin main
+
+# On another machine, pull changes
+git pull origin main
+```
+
+**Important**: Never commit the `.env` file (it contains API keys). Create it locally on each machine.
+
+### Documentation Files
+
+- `README.md` - Main documentation (this file)
+- `GETTING_STARTED.md` - Minimal setup without Docker
+- `HTTPS.md` - HTTPS configuration and testing
+- `CLAUDE.md` - Instructions for Claude Code
+- `docs/` - Technical documentation (MCP optimization, AI benchmarks, project status)
 
 ## Déploiement Automatique (CI/CD)
 
