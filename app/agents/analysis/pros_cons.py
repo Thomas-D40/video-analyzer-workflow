@@ -2,7 +2,7 @@ from typing import List, Dict
 import json
 import hashlib
 from openai import OpenAI
-from ..config import get_settings
+from ...config import get_settings
 
 def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = "") -> Dict[str, List[Dict]]:
     """

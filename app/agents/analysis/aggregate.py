@@ -12,7 +12,7 @@ et des résumés plutôt que d'envoyer tout le contenu dans le prompt.
 from typing import List, Dict
 import json
 from openai import OpenAI
-from ..config import get_settings
+from ...config import get_settings
 
 def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
     """

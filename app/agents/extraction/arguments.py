@@ -11,7 +11,7 @@ from typing import List, Dict
 import json
 import os
 from openai import OpenAI
-from ..config import get_settings
+from ...config import get_settings
 
 def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str, str]]:
     """

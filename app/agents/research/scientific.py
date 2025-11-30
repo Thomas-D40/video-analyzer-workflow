@@ -60,7 +60,7 @@ def _generate_arxiv_keywords(argument: str) -> str:
     Génère des mots-clés en anglais pour ArXiv via LLM.
     """
     from openai import OpenAI
-    from ..config import get_settings
+    from ...config import get_settings
     import json
     
     settings = get_settings()

@@ -1,6 +1,6 @@
 from typing import List, Dict
 from duckduckgo_search import DDGS
-from ..config import get_settings
+from ...config import get_settings
 
 
 def search_literature(argument: str, max_results: int = 10) -> List[Dict[str, str]]:
