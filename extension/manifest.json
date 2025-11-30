@@ -12,8 +12,8 @@
     "host_permissions": [
         "https://www.youtube.com/*",
         "https://*.youtube.com/*",
-        "http://46.202.128.11:8000/*",
-        "https://46.202.128.11:8000/*"
+        "https://46.202.128.11:8000/*",
+        "https://46.202.128.11:8443/*"
     ],
     "action": {
         "default_popup": "popup.html",

@@ -3,7 +3,7 @@ services:
   nginx:
     build: ./nginx
     ports:
-      - "443:443"
+      - "8443:443"  # HTTPS on port 8443 (avoids conflict with Hostinger panel)
       - "8000:443"  # Legacy port for backward compatibility (HTTPS)
     volumes:
       - ./nginx/ssl:/etc/nginx/ssl

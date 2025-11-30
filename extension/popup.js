@@ -13,16 +13,14 @@ const browserAPI = (typeof browser !== 'undefined') ? browser : {
     }
 };
 
-// Configuration - Détection automatique dev/prod
+// Configuration - HTTPS sur port 8000 (évite conflit avec panel Hostinger)
 function detectEnvironment() {
     const isUnpacked = chrome.runtime.getManifest().update_url === undefined;
     return isUnpacked ? 'development' : 'production';
 }
 
 const ENV = detectEnvironment();
-const API_URL = ENV === 'development'
-    ? 'http://46.202.128.11:8000/api/analyze'
-    : 'https://46.202.128.11:8000/api/analyze';
+const API_URL = 'https://46.202.128.11:8000/api/analyze';  // HTTPS sur port 8000
 
 console.log(`[Popup Config] Environment: ${ENV}, API URL: ${API_URL}`);
 

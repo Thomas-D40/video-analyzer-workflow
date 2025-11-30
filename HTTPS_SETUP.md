@@ -50,13 +50,14 @@ The extension will automatically use HTTPS in production mode.
 
 ## 📡 Ports Configuration
 
+**Note**: VPS Hostinger uses ports 80 and 443 for the control panel, so we use alternative ports.
+
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 80   | HTTP     | Redirects to HTTPS |
-| 443  | HTTPS    | Main HTTPS endpoint |
-| 8000 | HTTPS    | Legacy endpoint (maps to 443) |
+| 8000 | HTTPS    | Main HTTPS endpoint (extension uses this) |
+| 8443 | HTTPS    | Alternative HTTPS endpoint |
 
-**Why port 8000?** For backward compatibility with existing extension configurations.
+**Why port 8000/8443?** Avoids conflict with Hostinger's control panel on ports 80/443.
 
 ## 🔐 SSL Certificate Details
 
@@ -135,30 +136,34 @@ docker compose restart nginx
 ### Check HTTPS is Working
 
 ```bash
-# Test HTTPS endpoint
-curl -k https://46.202.128.11/health
+# Test HTTPS endpoint (port 8000)
+curl -k https://46.202.128.11:8000/health
 
 # Test with API key
-curl -k -X POST https://46.202.128.11/api/analyze \
+curl -k -X POST https://46.202.128.11:8000/api/analyze \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key" \
   -d '{"url": "https://youtube.com/watch?v=dQw4w9WgXcQ"}'
+
+# Alternative port 8443
+curl -k https://46.202.128.11:8443/health
 ```
 
 ### Check Certificate
 
 ```bash
-# View certificate details
-openssl s_client -connect 46.202.128.11:443 -showcerts
+# View certificate details (port 8000)
+openssl s_client -connect 46.202.128.11:8000 -showcerts
+
+# Or port 8443
+openssl s_client -connect 46.202.128.11:8443 -showcerts
 ```
 
-### Check Redirect
+### Check Ports
 
 ```bash
-# HTTP should redirect to HTTPS
-curl -I http://46.202.128.11
-# Should return: HTTP/1.1 301 Moved Permanently
-# Location: https://46.202.128.11/
+# Check which ports are listening
+sudo netstat -tlnp | grep -E ':(8000|8443)'
 ```
 
 ## 📊 Monitoring
@@ -210,36 +215,39 @@ docker compose logs nginx
 docker compose exec nginx ls -la /etc/nginx/ssl/
 ```
 
-### Port 443 Already in Use
+### Ports Already in Use
 
-**Symptom**: nginx fails to start
+**Symptom**: nginx fails to start with "port already allocated"
 
-**Solution**:
+**Solution**: This is already handled in our config.
+- Ports 80/443 are used by Hostinger control panel (expected)
+- We use ports 8000 and 8443 instead
+- If 8000 or 8443 are also in use, check with:
 ```bash
-# Check what's using port 443
-sudo lsof -i :443
-
-# Stop conflicting service
-sudo systemctl stop apache2  # or nginx, if installed globally
+# Check what's using these ports
+sudo lsof -i :8000
+sudo lsof -i :8443
 ```
 
-### Extension Still Uses HTTP
+### Extension Shows SSL Errors
 
 **Check**:
-1. Extension is loaded as "unpacked" (development mode)
-2. Development mode uses HTTP, production uses HTTPS
-3. For testing HTTPS locally, publish extension or modify config.js
+1. Certificate has been accepted in browser (navigate to https://46.202.128.11:8000 first)
+2. Extension permissions include https://46.202.128.11:8000/* in manifest.json
+3. Check browser console for specific SSL errors
 
 ## 🎯 Production Checklist
 
-- [ ] HTTPS accessible on port 443
-- [ ] HTTP redirects to HTTPS
-- [ ] Certificate accepted in browser
+- [ ] HTTPS accessible on port 8000
+- [ ] HTTPS accessible on port 8443 (alternative)
+- [ ] Certificate accepted in Chrome
+- [ ] Certificate accepted in Firefox
 - [ ] Extension works in Chrome
 - [ ] Extension works in Firefox
 - [ ] API key authentication works
 - [ ] MongoDB accessible internally
 - [ ] Logs are clean (no SSL errors)
+- [ ] Hostinger control panel still accessible on ports 80/443
 
 ## 📚 Additional Resources
 

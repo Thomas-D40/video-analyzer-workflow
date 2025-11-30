@@ -25,15 +25,17 @@ Check GitHub Actions:
 
 ### 3. Accept Self-Signed Certificate
 
+**Note**: VPS Hostinger uses ports 80/443 for the control panel, so our app runs on port 8000/8443.
+
 #### Chrome:
-1. Navigate to `https://46.202.128.11`
+1. Navigate to `https://46.202.128.11:8000`
 2. You'll see "Your connection is not private"
 3. Click **"Advanced"**
 4. Click **"Proceed to 46.202.128.11 (unsafe)"**
 5. ✅ Certificate accepted!
 
 #### Firefox:
-1. Navigate to `https://46.202.128.11`
+1. Navigate to `https://46.202.128.11:8000`
 2. You'll see "Warning: Potential Security Risk Ahead"
 3. Click **"Advanced"**
 4. Click **"Accept the Risk and Continue"**
@@ -42,11 +44,14 @@ Check GitHub Actions:
 ### 4. Test API Endpoint
 
 ```bash
-# Test health endpoint
-curl -k https://46.202.128.11/health
+# Test health endpoint (port 8000)
+curl -k https://46.202.128.11:8000/health
 
 # Expected response:
 {"status": "ok"}
+
+# Alternative: port 8443 also works
+curl -k https://46.202.128.11:8443/health
 ```
 
 ### 5. Test Chrome Extension
@@ -60,9 +65,9 @@ curl -k https://46.202.128.11/health
 7. Check console (F12):
    ```
    [Config] Environment: development
-   [Config] API URL: http://46.202.128.11:8000/api/analyze
+   [Config] API URL: https://46.202.128.11:8000/api/analyze
    ```
-8. ✅ Should work with HTTP (dev mode)
+8. ✅ Should work with HTTPS on port 8000
 
 ### 6. Test Firefox Extension
 
@@ -79,9 +84,9 @@ curl -k https://46.202.128.11/health
 4. Check console (F12):
    ```
    [Config] Environment: development
-   [Config] API URL: http://46.202.128.11:8000/api/analyze
+   [Config] API URL: https://46.202.128.11:8000/api/analyze
    ```
-5. ✅ Should work!
+5. ✅ Should work with HTTPS!
 
 ## 🔍 Troubleshooting
 
@@ -152,12 +157,13 @@ docker compose logs nginx
 ### Ports Listening:
 ```bash
 # On VPS
-sudo netstat -tlnp | grep -E ':(80|443|8000)'
+sudo netstat -tlnp | grep -E ':(8000|8443)'
 
 # Expected:
-tcp  0.0.0.0:80    LISTEN  (nginx)
-tcp  0.0.0.0:443   LISTEN  (nginx)
-tcp  0.0.0.0:8000  LISTEN  (nginx)
+tcp  0.0.0.0:8000  LISTEN  (docker-proxy)
+tcp  0.0.0.0:8443  LISTEN  (docker-proxy)
+
+# Note: Ports 80 and 443 are used by Hostinger control panel
 ```
 
 ### Container Status:
@@ -173,19 +179,17 @@ mongo               Up
 
 ### Extension Console:
 ```javascript
-// Chrome/Firefox (dev mode)
-[Config] Environment: development
-[Config] API URL: http://46.202.128.11:8000/api/analyze
-
-// Chrome/Firefox (prod mode - if published)
-[Config] Environment: production
+// Chrome/Firefox (dev and prod mode)
+[Config] Environment: development (or production)
 [Config] API URL: https://46.202.128.11:8000/api/analyze
+
+// Note: Both dev and prod now use HTTPS on port 8000
 ```
 
 ## ✨ Success Checklist
 
 - [ ] GitHub Actions deployment succeeded
-- [ ] `https://46.202.128.11` accessible
+- [ ] `https://46.202.128.11:8000` accessible
 - [ ] Certificate accepted in Chrome
 - [ ] Certificate accepted in Firefox
 - [ ] API health check returns `{"status": "ok"}`
@@ -206,15 +210,15 @@ mongo               Up
 ### Console Output:
 ```
 [Config] Environment: development
-[Config] API URL: http://46.202.128.11:8000/api/analyze
+[Config] API URL: https://46.202.128.11:8000/api/analyze
 [Cookies] Extracted 15 YouTube cookies
-POST http://46.202.128.11:8000/api/analyze 200 OK
+POST https://46.202.128.11:8000/api/analyze 200 OK
 ```
 
 ## 🆘 Need Help?
 
 1. Check deployment logs: `docker compose logs -f`
-2. Verify HTTPS: `curl -k https://46.202.128.11/health`
+2. Verify HTTPS: `curl -k https://46.202.128.11:8000/health`
 3. Review HTTPS_SETUP.md for detailed troubleshooting
 4. Check extension console (F12) for errors
 

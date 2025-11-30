@@ -22,9 +22,9 @@ function detectEnvironment() {
  */
 const config = {
     development: {
-        apiUrl: 'http://46.202.128.11:8000/api/analyze',
-        healthUrl: 'http://46.202.128.11:8000/health',
-        useHttps: false
+        apiUrl: 'https://46.202.128.11:8000/api/analyze',
+        healthUrl: 'https://46.202.128.11:8000/health',
+        useHttps: true
     },
     production: {
         apiUrl: 'https://46.202.128.11:8000/api/analyze',
