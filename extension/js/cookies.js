@@ -2,13 +2,15 @@
  * Module Cookies - Extraction des cookies YouTube
  */
 
+import browser from './polyfill.js';
+
 /**
  * Extrait les cookies YouTube de l'utilisateur
  * @returns {Promise<string>} - Cookies au format Netscape
  */
 export async function getYouTubeCookies() {
     try {
-        const cookies = await chrome.cookies.getAll({
+        const cookies = await browser.cookies.getAll({
             domain: '.youtube.com'
         });
 

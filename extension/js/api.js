@@ -2,10 +2,13 @@
  * Module API - Communication avec le backend
  */
 
+import browser from './polyfill.js';
 import { getCurrentApiKey } from './auth.js';
 import { getYouTubeCookies } from './cookies.js';
 
-const API_URL = 'http://46.202.128.11:8000/api/analyze'; // Remplacer <VOTRE_IP_VPS> par l'IP réelle
+// Use HTTPS for secure communication
+// Note: If using self-signed certificate, you may need to accept it in browser first
+const API_URL = 'https://46.202.128.11:8000/api/analyze';
 
 /**
  * Analyse une vidéo YouTube
@@ -74,11 +77,11 @@ export async function checkHealth() {
 export async function getCurrentVideoUrl() {
     try {
         // Essai 1: Fenêtre courante
-        let tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        let tabs = await browser.tabs.query({ active: true, currentWindow: true });
 
         // Essai 2: Dernière fenêtre focus (fallback)
         if (!tabs || tabs.length === 0) {
-            tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true });
         }
 
         const tab = tabs[0];

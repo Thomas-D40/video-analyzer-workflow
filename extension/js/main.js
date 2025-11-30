@@ -2,6 +2,7 @@
  * Module principal - Orchestration de l'extension
  */
 
+import browser from './polyfill.js';
 import * as Auth from './auth.js';
 import * as API from './api.js';
 import * as UI from './ui.js';
@@ -12,17 +13,14 @@ let currentVideoUrl = '';
 // Cache local
 const cache = {
     async get(url) {
-        return new Promise((resolve) => {
-            chrome.storage.local.get([url], (result) => {
-                resolve(result[url]);
-            });
-        });
+        const result = await browser.storage.local.get([url]);
+        return result[url];
     },
 
     async set(url, data) {
         const storageData = {};
         storageData[url] = data;
-        await chrome.storage.local.set(storageData);
+        await browser.storage.local.set(storageData);
     }
 };
 

@@ -1,5 +1,20 @@
+/**
+ * Browser API Polyfill for cross-browser compatibility
+ */
+const browserAPI = (typeof browser !== 'undefined') ? browser : {
+    tabs: {
+        query: (queryInfo) => new Promise((resolve) => chrome.tabs.query(queryInfo, resolve))
+    },
+    storage: {
+        local: {
+            get: (keys) => new Promise((resolve) => chrome.storage.local.get(keys, resolve)),
+            set: (items) => new Promise((resolve) => chrome.storage.local.set(items, resolve))
+        }
+    }
+};
+
 // Configuration
-const API_URL = 'http://localhost:8000/api/analyze';
+const API_URL = 'https://46.202.128.11:8000/api/analyze';
 
 // Éléments DOM
 const analyzeBtn = document.getElementById('analyzeBtn');
@@ -21,12 +36,12 @@ let currentVideoUrl = '';
 async function getCurrentVideoUrl() {
     try {
         // Essai 1: Fenêtre courante
-        let tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        let tabs = await browserAPI.tabs.query({ active: true, currentWindow: true });
 
         // Essai 2: Dernière fenêtre focus (fallback)
         if (!tabs || tabs.length === 0) {
             console.log("Aucun onglet dans currentWindow, essai lastFocusedWindow");
-            tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            tabs = await browserAPI.tabs.query({ active: true, lastFocusedWindow: true });
         }
 
         const tab = tabs[0];
@@ -378,17 +393,14 @@ function renderResults(data) {
 // --- Logique Principale ---
 
 async function checkExistingAnalysis(url) {
-    return new Promise((resolve) => {
-        chrome.storage.local.get([url], (result) => {
-            resolve(result[url]);
-        });
-    });
+    const result = await browserAPI.storage.local.get([url]);
+    return result[url];
 }
 
 async function saveAnalysis(url, data) {
     const storageData = {};
     storageData[url] = data;
-    await chrome.storage.local.set(storageData);
+    await browserAPI.storage.local.set(storageData);
 }
 
 async function analyzeVideo(forceRefresh = false) {

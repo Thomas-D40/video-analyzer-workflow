@@ -2,6 +2,8 @@
  * Module d'authentification - Gestion de la clé API
  */
 
+import browser from './polyfill.js';
+
 // Éléments DOM
 let apiKeySetup, apiKeyInput, saveApiKeyBtn, toggleApiKeyVisibility;
 
@@ -31,24 +33,17 @@ export function initAuthElements() {
  * Récupère la clé API depuis le storage
  */
 export async function getApiKey() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(['apiKey'], (result) => {
-            apiKey = result.apiKey || '';
-            resolve(apiKey);
-        });
-    });
+    const result = await browser.storage.local.get(['apiKey']);
+    apiKey = result.apiKey || '';
+    return apiKey;
 }
 
 /**
  * Sauvegarde la clé API dans le storage
  */
 export async function saveApiKey(key) {
-    return new Promise((resolve) => {
-        chrome.storage.local.set({ apiKey: key }, () => {
-            apiKey = key;
-            resolve();
-        });
-    });
+    await browser.storage.local.set({ apiKey: key });
+    apiKey = key;
 }
 
 /**
@@ -80,7 +75,7 @@ async function handleSaveApiKey() {
         hideSetupScreen();
 
         // Notifier le main.js qu'une clé a été sauvegardée
-        window.dispatchEvent(new CustomEvent('apiKeyS aved', { detail: { key } }));
+        window.dispatchEvent(new CustomEvent('apiKeySaved', { detail: { key } }));
     }
 }
 

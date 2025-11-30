@@ -11,7 +11,8 @@
     ],
     "host_permissions": [
         "https://www.youtube.com/*",
-        "https://*.youtube.com/*"
+        "https://*.youtube.com/*",
+        "https://46.202.128.11:8000/*"
     ],
     "action": {
         "default_popup": "popup.html",
@@ -25,5 +26,11 @@
         "16": "icon16.png",
         "48": "icon48.png",
         "128": "icon128.png"
+    },
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "youtube-analyzer@anthropic.com",
+            "strict_min_version": "109.0"
+        }
     }
 }
