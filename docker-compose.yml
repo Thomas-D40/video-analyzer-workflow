@@ -1,21 +1,33 @@
 version: '3.9'
 services:
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8000:443"  # Legacy port for backward compatibility
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - api
+    restart: unless-stopped
+
   api:
     build: ./
-    command: uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.api:app --host 0.0.0.0 --port 8000
     environment:
-      - ENV=development
+      - ENV=production
       - DATABASE_URL=mongodb://mongo:27017
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ALLOWED_API_KEYS=${ALLOWED_API_KEYS:-}
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
       - ./:/app
     depends_on:
       mongo:
         condition: service_started
-
+    restart: unless-stopped
 
   mongo:
     image: mongo:6.0
@@ -23,6 +35,7 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    restart: unless-stopped
 
 volumes:
   mongo_data:
