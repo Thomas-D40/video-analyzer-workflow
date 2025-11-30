@@ -1,15 +1,25 @@
 # Guide d'Installation et d'Utilisation
 
-## Extension Chrome : YouTube Argument Analyzer
+## Extension Chrome/Firefox : YouTube Argument Analyzer
 
-### Installation
+### 🔧 Configuration Automatique Dev/Prod
 
-1. **Démarrer l'API Backend**
+L'extension détecte automatiquement l'environnement et utilise le bon endpoint:
+
+- **Développement** (extension non empaquetée): `http://46.202.128.11:8000`
+- **Production** (extension publiée): `https://46.202.128.11:8000`
+
+### Installation Chrome
+
+1. **Démarrer l'API Backend** (pour dev local)
    ```bash
-   # Depuis la racine du projet
+   # Option 1: Docker (recommandé)
+   docker compose up -d --build
+
+   # Option 2: Direct
    uvicorn app.api:app --reload --port 8000
    ```
-   L'API sera accessible sur `http://localhost:8000`
+   L'API sera accessible sur `http://localhost:8000` (local) ou `http://46.202.128.11:8000` (VPS)
 
 2. **Charger l'Extension dans Chrome**
    - Ouvrir Chrome et aller à `chrome://extensions/`
@@ -17,6 +27,11 @@
    - Cliquer sur "Charger l'extension non empaquetée"
    - Sélectionner le dossier `extension/` du projet
    - L'extension apparaîtra dans la barre d'outils
+   - ✅ L'extension utilisera automatiquement HTTP en mode développement
+
+### Installation Firefox
+
+Voir [FIREFOX_INSTALL.md](FIREFOX_INSTALL.md) pour les instructions détaillées.
 
 ### Utilisation
 

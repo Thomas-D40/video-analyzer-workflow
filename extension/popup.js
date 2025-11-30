@@ -13,8 +13,18 @@ const browserAPI = (typeof browser !== 'undefined') ? browser : {
     }
 };
 
-// Configuration
-const API_URL = 'https://46.202.128.11:8000/api/analyze';
+// Configuration - Détection automatique dev/prod
+function detectEnvironment() {
+    const isUnpacked = chrome.runtime.getManifest().update_url === undefined;
+    return isUnpacked ? 'development' : 'production';
+}
+
+const ENV = detectEnvironment();
+const API_URL = ENV === 'development'
+    ? 'http://46.202.128.11:8000/api/analyze'
+    : 'https://46.202.128.11:8000/api/analyze';
+
+console.log(`[Popup Config] Environment: ${ENV}, API URL: ${API_URL}`);
 
 // Éléments DOM
 const analyzeBtn = document.getElementById('analyzeBtn');

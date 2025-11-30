@@ -5,10 +5,7 @@
 import browser from './polyfill.js';
 import { getCurrentApiKey } from './auth.js';
 import { getYouTubeCookies } from './cookies.js';
-
-// Use HTTPS for secure communication
-// Note: If using self-signed certificate, you may need to accept it in browser first
-const API_URL = 'https://46.202.128.11:8000/api/analyze';
+import { getApiUrl } from './config.js';
 
 /**
  * Analyse une vidéo YouTube
@@ -28,7 +25,7 @@ export async function analyzeVideo(url, forceRefresh = false) {
     // Extraire les cookies YouTube
     const youtubeCookies = await getYouTubeCookies();
 
-    const response = await fetch(API_URL, {
+    const response = await fetch(getApiUrl(), {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
@@ -61,7 +58,8 @@ export async function analyzeVideo(url, forceRefresh = false) {
  * @returns {Promise<Object>} - Statut du backend
  */
 export async function checkHealth() {
-    const response = await fetch('http://localhost:8000/health');
+    const { getHealthUrl } = await import('./config.js');
+    const response = await fetch(getHealthUrl());
 
     if (!response.ok) {
         throw new Error('Backend non disponible');
