@@ -11,7 +11,13 @@
       "Bash(mkdir:*)",
       "Bash(mv:*)",
       "Bash(python -m py_compile:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(git push:*)",
+      "WebSearch",
+      "Bash(claude mcp list:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(pip3 install:*)"
     ],
     "deny": [],
     "ask": []

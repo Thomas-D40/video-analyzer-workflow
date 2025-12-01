@@ -4,31 +4,33 @@ Agent d'extraction des arguments depuis la transcription d'une vidéo YouTube.
 Cet agent analyse la transcription pour identifier les arguments principaux
 avancés par le vidéaste et déterminer si le langage est affirmatif ou conditionnel.
 
-Utilise MCP pour réduire la consommation de tokens en accédant à la transcription
-via des références plutôt que d'envoyer tout le contenu dans le prompt.
+Supporte le français et l'anglais avec traduction automatique pour la recherche.
 """
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import json
 import os
 from openai import OpenAI
 from ...config import get_settings
+from ...utils.language_detector import detect_language
 
-def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str, str]]:
+def extract_arguments(transcript_text: str, video_id: str = "") -> Tuple[str, List[Dict[str, str]]]:
     """
     Extrait les arguments principaux de la transcription d'une vidéo.
-    
-    Analyse le texte pour identifier:
-    - Les arguments/thèses principaux mis en avant
-    - Le ton utilisé (affirmatif vs conditionnel)
-    
+
+    Détecte la langue de la vidéo (français/anglais) et extrait les arguments.
+    Pour les vidéos françaises, fournit des traductions anglaises pour la recherche.
+
     Args:
         transcript_text: Texte de la transcription de la vidéo
         video_id: Identifiant de la vidéo (optionnel)
-        
+
     Returns:
-        Liste de dictionnaires avec les champs:
-        - "argument": texte de l'argument
-        - "stance": "affirmatif" ou "conditionnel"
+        Tuple contenant:
+        - language: Code de langue ("fr" ou "en")
+        - arguments: Liste de dictionnaires avec:
+          - "argument": texte de l'argument (langue originale)
+          - "argument_en": traduction anglaise (pour recherche)
+          - "stance": "affirmatif" ou "conditionnel"
     """
     settings = get_settings()
     
@@ -37,8 +39,11 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
     
     if not transcript_text or len(transcript_text.strip()) < 50:
         # Si la transcription est trop courte ou vide, on retourne une liste vide
-        return []
+        return ("en", [])
 
+    # Step 1: Detect language
+    language = detect_language(transcript_text)
+    print(f"[INFO arguments] Video language detected: {language}")
 
     optimized_transcript = transcript_text[:25000]
     if len(transcript_text) > 25000:
@@ -76,61 +81,105 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> List[Dict[str
         for var, value in saved_proxy_vars.items():
             os.environ[var] = value
     
-    # Prompt amélioré pour filtrer les expériences de pensée et exemples illustratifs
-    system_prompt = """Tu es un expert en analyse de discours et d'arguments. 
-Analyse la transcription d'une vidéo YouTube pour identifier TOUS les arguments principaux et les thèses centrales.
+    # Bilingual prompt that adapts based on detected language
+    if language == "fr":
+        system_prompt = """You are an expert in discourse and argument analysis.
+Analyze a FRENCH YouTube video transcript to identify ALL main arguments and central theses.
 
-**QU'EST-CE QU'UN ARGUMENT RÉEL ?**
-Un argument est une affirmation factuelle, une thèse ou une position que l'auteur défend activement.
-Pour les vidéos éducatives ou de vulgarisation, considère les **points clés explicatifs** comme des arguments à vérifier.
+**WHAT IS A REAL ARGUMENT?**
+An argument is a factual claim, thesis, or position that the author actively defends.
+For educational or popularization videos, consider **key explanatory points** as arguments to verify.
 
-**CRITÈRES D'INCLUSION (CE QU'IL FAUT GARDER) :**
-1.  **Thèses contestables** : "Le nucléaire est la seule solution pour le climat".
-2.  **Affirmations factuelles majeures** : "Le cerveau humain consomme 20% de l'énergie du corps".
-3.  **Points clés d'une explication** : Si la vidéo explique un phénomène, extrait les étapes clés comme des affirmations.
+**INCLUSION CRITERIA (WHAT TO KEEP):**
+1. **Debatable theses**: "Nuclear power is the only solution for climate"
+2. **Major factual claims**: "The human brain consumes 20% of body energy"
+3. **Key explanation points**: If video explains a phenomenon, extract key steps as claims
 
-**OBJECTIF DE COUVERTURE :**
-- Ne te limite pas aux 2-3 points principaux.
-- Extrait une liste EXHAUSTIVE de tous les arguments substantiels (jusqu'à 15-20 arguments si nécessaire).
-- Si la vidéo est dense, sépare les points distincts plutôt que de les fusionner.
+**COVERAGE GOAL:**
+- Don't limit to 2-3 main points
+- Extract COMPREHENSIVE list of all substantial arguments (up to 15-20 if needed)
+- If video is dense, separate distinct points rather than merging
 
-**CRITÈRES D'EXCLUSION STRICTS (CE QU'IL FAUT IGNORER) :**
-1.  **Truismes et Évidences** : "L'eau ça mouille", "La guerre c'est mal".
-2.  **Définitions simples** : "Une biographie est un livre sur la vie de quelqu'un".
-3.  **Métaphores et analogies** : "Imaginez des carrés et triangles qui veulent se marier".
-4.  **Expériences de pensée** : "Supposons qu'un alien arrive sur Terre".
-5.  **Phrases de transition** : "Passons maintenant au point suivant".
+**STRICT EXCLUSION CRITERIA (WHAT TO IGNORE):**
+1. **Truisms**: "Water is wet", "War is bad"
+2. **Simple definitions**: "A biography is a book about someone's life"
+3. **Metaphors and analogies**: "Imagine squares and triangles wanting to marry"
+4. **Thought experiments**: "Suppose an alien arrives on Earth"
+5. **Transition phrases**: "Let's move to the next point"
 
-**EXEMPLES :**
-✅ ARGUMENT VALIDE : "Le réchauffement climatique est causé par l'activité humaine"
-✅ ARGUMENT VALIDE : "Les réseaux sociaux augmentent le risque de dépression chez les ados"
-✅ ARGUMENT VALIDE : "La mécanique quantique remet en cause le déterminisme classique" (Point clé éducatif)
-❌ NON-ARGUMENT : "Les biographies ne sont pas des sources de vérité absolue" (Définition méthodologique simple).
-❌ NON-ARGUMENT : "Imaginez que vous êtes un atome" (Analogie).
+**INSTRUCTIONS:**
+1. Identify central theses and key points the author presents
+2. Ignore anything trivial, obvious or purely illustrative
+3. Reformulate argument concisely and affirmatively
+4. For each real argument, determine tone:
+   - "affirmatif": presented as established truth
+   - "conditionnel": uses "peut-être", "il est possible que", "pourrait", etc.
+5. **IMPORTANT**: Provide BOTH the original French text AND an English translation for research
 
-**INSTRUCTIONS :**
-1. Identifie les thèses centrales et les points clés que l'auteur présente.
-2. Ignore tout ce qui est trivial, évident ou purement illustratif.
-3. Reformule l'argument de manière concise et affirmative.
-4. Pour chaque argument réel, détermine le ton :
-   - "affirmatif" : présenté comme une vérité établie
-   - "conditionnel" : utilise "peut-être", "il est possible que", "pourrait", etc.
-
-**FORMAT JSON :**
+**JSON FORMAT:**
 {
   "arguments": [
-    {"argument": "texte concis de l'argument réel", "stance": "affirmatif"},
-    {"argument": "texte concis de l'argument réel", "stance": "conditionnel"}
+    {
+      "argument": "French text of the argument",
+      "argument_en": "English translation for research",
+      "stance": "affirmatif"
+    }
   ]
 }
 
-N'inclus QUE les arguments substantiels. Si la vidéo ne contient que des banalités, retourne une liste vide."""
+Include ONLY substantial arguments. If video contains only banalities, return empty list."""
+    else:  # English video
+        system_prompt = """You are an expert in discourse and argument analysis.
+Analyze an ENGLISH YouTube video transcript to identify ALL main arguments and central theses.
+
+**WHAT IS A REAL ARGUMENT?**
+An argument is a factual claim, thesis, or position that the author actively defends.
+For educational or popularization videos, consider **key explanatory points** as arguments to verify.
+
+**INCLUSION CRITERIA (WHAT TO KEEP):**
+1. **Debatable theses**: "Nuclear power is the only solution for climate"
+2. **Major factual claims**: "The human brain consumes 20% of body energy"
+3. **Key explanation points**: If video explains a phenomenon, extract key steps as claims
+
+**COVERAGE GOAL:**
+- Don't limit to 2-3 main points
+- Extract COMPREHENSIVE list of all substantial arguments (up to 15-20 if needed)
+- If video is dense, separate distinct points rather than merging
+
+**STRICT EXCLUSION CRITERIA (WHAT TO IGNORE):**
+1. **Truisms**: "Water is wet", "War is bad"
+2. **Simple definitions**: "A biography is a book about someone's life"
+3. **Metaphors and analogies**: "Imagine squares and triangles wanting to marry"
+4. **Thought experiments**: "Suppose an alien arrives on Earth"
+5. **Transition phrases**: "Let's move to the next point"
+
+**INSTRUCTIONS:**
+1. Identify central theses and key points the author presents
+2. Ignore anything trivial, obvious or purely illustrative
+3. Reformulate argument concisely and affirmatively
+4. For each real argument, determine tone:
+   - "affirmatif": presented as established truth
+   - "conditionnel": uses "maybe", "it is possible that", "could", etc.
+5. For English videos, "argument" and "argument_en" will be the same
+
+**JSON FORMAT:**
+{
+  "arguments": [
+    {
+      "argument": "English text of the argument",
+      "argument_en": "Same English text",
+      "stance": "affirmatif"
+    }
+  ]
+}
+
+Include ONLY substantial arguments. If video contains only banalities, return empty list."""
     
-    user_prompt = f"""Analyse cette transcription et extrais les arguments principaux:
+    user_prompt = f"""Analyze this transcript and extract the main arguments:
 
 {optimized_transcript}
 
-Retourne uniquement le JSON, sans texte supplémentaire."""
+Return only JSON, no additional text."""
 
     try:
         response = client.chat.completions.create(
@@ -165,21 +214,25 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
                 if stance not in ["affirmatif", "conditionnel"]:
                     # Correction automatique basée sur des mots-clés
                     arg_text = arg["argument"].lower()
-                    if any(word in arg_text for word in ["peut", "pourrait", "semble", "possible", "probablement"]):
+                    if any(word in arg_text for word in ["peut", "pourrait", "semble", "possible", "probablement", "maybe", "could", "might", "possibly"]):
                         stance = "conditionnel"
                     else:
                         stance = "affirmatif"
-                
+
+                # Get English version (for research)
+                argument_en = arg.get("argument_en", arg["argument"])
+
                 validated_arguments.append({
                     "argument": arg["argument"].strip(),
+                    "argument_en": argument_en.strip(),
                     "stance": stance
                 })
-        
-        return validated_arguments
+
+        return (language, validated_arguments)
         
     except json.JSONDecodeError as e:
         print(f"Erreur de parsing JSON de la réponse OpenAI: {e}")
-        return []
+        return (language, [])
     except Exception as e:
         print(f"Erreur lors de l'extraction des arguments: {e}")
-        return []
+        return (language, [])
