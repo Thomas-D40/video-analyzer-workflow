@@ -1,13 +1,13 @@
 """
-Module principal pour la logique métier de l'analyse de vidéos YouTube.
+Main module for YouTube video analysis business logic.
 
-Ce module contient la fonction `process_video` qui orchestre l'ensemble du workflow:
-- Extraction de transcription
-- Extraction d'arguments
-- Recherche de sources
-- Analyse pros/cons
-- Calcul de fiabilité
-- Génération de rapports
+This module contains the `process_video` function that orchestrates the entire workflow:
+- Transcript extraction
+- Argument extraction
+- Source research
+- Pros/cons analysis
+- Reliability calculation
+- Report generation
 """
 import os
 from typing import Dict, List, Any
@@ -33,44 +33,44 @@ from app.services.storage import save_analysis, get_analysis
 
 async def process_video(youtube_url: str, force_refresh: bool = False, youtube_cookies: str = None) -> Dict[str, Any]:
     """
-    Traite une vidéo YouTube et retourne l'analyse complète.
-    
+    Processes a YouTube video and returns the complete analysis.
+
     Args:
-        youtube_url: URL de la vidéo YouTube
-        
+        youtube_url: YouTube video URL
+
     Returns:
-        Dictionnaire contenant:
-        - video_id: ID de la vidéo
-        - youtube_url: URL source
-        - arguments: Liste des arguments analysés
-        - report_markdown: Rapport formaté en Markdown
-        
+        Dictionary containing:
+        - video_id: Video ID
+        - youtube_url: Source URL
+        - arguments: List of analyzed arguments
+        - report_markdown: Markdown-formatted report
+
     Raises:
-        ValueError: Si l'URL est invalide ou la transcription introuvable
-        Exception: Pour toute autre erreur durant le traitement
+        ValueError: If URL is invalid or transcript not found
+        Exception: For any other error during processing
     """
-    # Étape 1: Extraction de l'ID
+    # Step 1: Extract video ID
     video_id = extract_video_id(youtube_url)
     if not video_id:
-        raise ValueError("Impossible d'extraire l'ID de la vidéo depuis l'URL")
-    
-    # Étape 1.5: Vérification du cache
+        raise ValueError("Unable to extract video ID from URL")
+
+    # Step 1.5: Check cache
     if not force_refresh:
         cached_analysis = await get_analysis(video_id)
         if cached_analysis and cached_analysis.status == "completed":
-            print(f"[INFO] Analyse trouvée en cache pour {video_id}")
+            print(f"[INFO] Cached analysis found for {video_id}")
             result = cached_analysis.content
-            # On ajoute les métadonnées de cache
+            # Add cache metadata
             result["cached"] = True
             result["last_updated"] = cached_analysis.updated_at.isoformat()
             return result
 
-    # Étape 2: Extraction de la transcription
+    # Step 2: Extract transcript
     transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)
     if not transcript_text or len(transcript_text.strip()) < 50:
-        raise ValueError("Transcription introuvable ou trop courte")
-    
-    # Étape 3: Extraction des arguments avec détection de langue
+        raise ValueError("Transcript not found or too short")
+
+    # Step 3: Extract arguments with language detection
     language, arguments = extract_arguments(transcript_text, video_id=video_id)
     print(f"[INFO workflow] Video language: {language}")
 

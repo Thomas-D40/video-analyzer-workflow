@@ -1,10 +1,10 @@
 """
-Agent d'extraction des arguments depuis la transcription d'une vidéo YouTube.
+Argument extraction agent from YouTube video transcripts.
 
-Cet agent analyse la transcription pour identifier les arguments principaux
-avancés par le vidéaste et déterminer si le langage est affirmatif ou conditionnel.
+This agent analyzes transcripts to identify the main arguments
+presented by the video creator and determines whether the language is assertive or conditional.
 
-Supporte le français et l'anglais avec traduction automatique pour la recherche.
+Supports French and English with automatic translation for research.
 """
 from typing import List, Dict, Tuple
 import json
@@ -15,30 +15,30 @@ from ...utils.language_detector import detect_language
 
 def extract_arguments(transcript_text: str, video_id: str = "") -> Tuple[str, List[Dict[str, str]]]:
     """
-    Extrait les arguments principaux de la transcription d'une vidéo.
+    Extracts the main arguments from a video transcript.
 
-    Détecte la langue de la vidéo (français/anglais) et extrait les arguments.
-    Pour les vidéos françaises, fournit des traductions anglaises pour la recherche.
+    Detects the video language (French/English) and extracts arguments.
+    For French videos, provides English translations for research.
 
     Args:
-        transcript_text: Texte de la transcription de la vidéo
-        video_id: Identifiant de la vidéo (optionnel)
+        transcript_text: Video transcript text
+        video_id: Video identifier (optional)
 
     Returns:
-        Tuple contenant:
-        - language: Code de langue ("fr" ou "en")
-        - arguments: Liste de dictionnaires avec:
-          - "argument": texte de l'argument (langue originale)
-          - "argument_en": traduction anglaise (pour recherche)
-          - "stance": "affirmatif" ou "conditionnel"
+        Tuple containing:
+        - language: Language code ("fr" or "en")
+        - arguments: List of dictionaries with:
+          - "argument": argument text (original language)
+          - "argument_en": English translation (for research)
+          - "stance": "affirmatif" or "conditionnel"
     """
     settings = get_settings()
-    
+
     if not settings.openai_api_key:
-        raise ValueError("OPENAI_API_KEY non configurée dans les variables d'environnement")
-    
+        raise ValueError("OPENAI_API_KEY not configured in environment variables")
+
     if not transcript_text or len(transcript_text.strip()) < 50:
-        # Si la transcription est trop courte ou vide, on retourne une liste vide
+        # If transcript is too short or empty, return empty list
         return ("en", [])
 
     # Step 1: Detect language
@@ -47,15 +47,15 @@ def extract_arguments(transcript_text: str, video_id: str = "") -> Tuple[str, Li
 
     optimized_transcript = transcript_text[:25000]
     if len(transcript_text) > 25000:
-        optimized_transcript += f"\n\n[Note: Transcription complète de {len(transcript_text)} caractères]"
-    
-    # Initialisation du client OpenAI sans paramètres de proxy
-    # (certaines variables d'environnement peuvent causer des problèmes)
-    # Solution robuste : désactiver les proxies via les variables d'environnement
+        optimized_transcript += f"\n\n[Note: Full transcript of {len(transcript_text)} characters]"
+
+    # Initialize OpenAI client without proxy parameters
+    # (some environment variables can cause issues)
+    # Robust solution: disable proxies via environment variables
     saved_proxy_vars = {}
     proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
-    
-    # Sauvegarder et supprimer temporairement les variables de proxy
+
+    # Save and temporarily remove proxy variables
     for var in proxy_vars:
         if var in os.environ:
             saved_proxy_vars[var] = os.environ.pop(var)
@@ -183,16 +183,16 @@ Return only JSON, no additional text."""
 
     try:
         response = client.chat.completions.create(
-            model=settings.openai_smart_model,  # Utilisation du modèle intelligent (GPT-4o) pour l'extraction
+            model=settings.openai_smart_model,  # Use smart model (GPT-4o) for extraction
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.2,  # Température basse pour plus de précision
-            response_format={"type": "json_object"}  # Force le format JSON
+            temperature=0.2,  # Low temperature for higher precision
+            response_format={"type": "json_object"}  # Force JSON format
         )
-        
-        # Parse la réponse JSON
+
+        # Parse JSON response
         content = response.choices[0].message.content
         parsed = json.loads(content)
         
@@ -202,17 +202,17 @@ Return only JSON, no additional text."""
         elif isinstance(parsed, list):
             arguments = parsed
         else:
-            print(f"Format de réponse inattendu: {type(parsed)}")
+            print(f"Unexpected response format: {type(parsed)}")
             arguments = []
-        
+
 
         validated_arguments = []
         for arg in arguments:
             if isinstance(arg, dict) and "argument" in arg and "stance" in arg:
-                # S'assurer que stance est bien "affirmatif" ou "conditionnel"
+                # Ensure stance is either "affirmatif" or "conditionnel"
                 stance = arg["stance"].lower()
                 if stance not in ["affirmatif", "conditionnel"]:
-                    # Correction automatique basée sur des mots-clés
+                    # Automatic correction based on keywords
                     arg_text = arg["argument"].lower()
                     if any(word in arg_text for word in ["peut", "pourrait", "semble", "possible", "probablement", "maybe", "could", "might", "possibly"]):
                         stance = "conditionnel"
@@ -229,10 +229,10 @@ Return only JSON, no additional text."""
                 })
 
         return (language, validated_arguments)
-        
+
     except json.JSONDecodeError as e:
-        print(f"Erreur de parsing JSON de la réponse OpenAI: {e}")
+        print(f"JSON parsing error from OpenAI response: {e}")
         return (language, [])
     except Exception as e:
-        print(f"Erreur lors de l'extraction des arguments: {e}")
+        print(f"Error during argument extraction: {e}")
         return (language, [])
