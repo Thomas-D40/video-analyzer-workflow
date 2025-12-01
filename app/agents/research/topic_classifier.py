@@ -1,8 +1,8 @@
 """
-Agent de classification thématique des arguments.
+Thematic classification agent for arguments.
 
-Cet agent utilise un LLM pour déterminer le domaine scientifique
-d'un argument afin de sélectionner les sources de recherche appropriées.
+This agent uses an LLM to determine the scientific domain
+of an argument to select appropriate research sources.
 """
 import json
 from typing import List
@@ -10,7 +10,7 @@ from openai import OpenAI
 from ...config import get_settings
 
 
-# Mapping des catégories vers les agents de recherche appropriés
+# Mapping of categories to appropriate research agents
 # Only academic and official statistical sources - no general web search
 CATEGORY_AGENTS_MAP = {
     "medicine": ["pubmed", "semantic_scholar", "crossref"],
@@ -30,24 +30,24 @@ CATEGORY_AGENTS_MAP = {
 
 def classify_argument_topic(argument: str) -> List[str]:
     """
-    Classifie un argument par domaine scientifique et retourne
-    les catégories pertinentes.
+    Classify an argument by scientific domain and return
+    relevant categories.
 
     Args:
-        argument: L'argument à classifier
+        argument: The argument to classify
 
     Returns:
-        Liste de catégories (ex: ["medicine", "biology"])
-        Si aucune catégorie spécifique n'est identifiée, retourne ["general"]
+        List of categories (e.g., ["medicine", "biology"])
+        If no specific category is identified, returns ["general"]
     """
     settings = get_settings()
     if not settings.openai_api_key:
-        print("[WARN topic_classifier] Pas de clé OpenAI, utilisation de 'general'")
+        print("[WARN topic_classifier] No OpenAI key, using 'general'")
         return ["general"]
 
     client = OpenAI(api_key=settings.openai_api_key)
 
-    # Liste des catégories disponibles
+    # List of available categories
     categories = [
         "medicine", "biology", "psychology",
         "economics",
@@ -97,32 +97,32 @@ Respond ONLY in JSON format:
         data = json.loads(content)
         categories_list = data.get("categories", ["general"])
 
-        # Validation: s'assurer que les catégories sont valides
+        # Validation: ensure categories are valid
         valid_categories = [c for c in categories_list if c in categories]
         if not valid_categories:
             valid_categories = ["general"]
 
-        print(f"[INFO topic_classifier] Argument classifié: {valid_categories}")
+        print(f"[INFO topic_classifier] Argument classified: {valid_categories}")
         return valid_categories
 
     except Exception as e:
-        print(f"[ERROR topic_classifier] Erreur classification: {e}")
+        print(f"[ERROR topic_classifier] Classification error: {e}")
         return ["general"]
 
 
 def get_agents_for_argument(argument: str) -> List[str]:
     """
-    Détermine quels agents de recherche utiliser pour un argument donné.
+    Determine which research agents to use for a given argument.
 
     Args:
-        argument: L'argument à analyser
+        argument: The argument to analyze
 
     Returns:
-        Liste des noms d'agents à utiliser (ex: ["pubmed", "semantic_scholar", "web"])
+        List of agent names to use (e.g., ["pubmed", "semantic_scholar"])
     """
     categories = classify_argument_topic(argument)
 
-    # Collecter tous les agents recommandés (sans doublons)
+    # Collect all recommended agents (without duplicates)
     agents = []
     seen = set()
 
@@ -133,27 +133,27 @@ def get_agents_for_argument(argument: str) -> List[str]:
                 agents.append(agent)
                 seen.add(agent)
 
-    print(f"[INFO topic_classifier] Agents sélectionnés: {agents}")
+    print(f"[INFO topic_classifier] Agents selected: {agents}")
     return agents
 
 
 def get_research_strategy(argument: str) -> dict:
     """
-    Retourne une stratégie de recherche complète pour un argument.
+    Return a complete research strategy for an argument.
 
     Args:
-        argument: L'argument à analyser
+        argument: The argument to analyze
 
     Returns:
-        Dictionnaire avec:
-        - categories: Liste des catégories identifiées
-        - agents: Liste des agents recommandés
-        - priority: Agent prioritaire pour cet argument
+        Dictionary with:
+        - categories: List of identified categories
+        - agents: List of recommended agents
+        - priority: Priority agent for this argument
     """
     categories = classify_argument_topic(argument)
     agents = get_agents_for_argument(argument)
 
-    # Déterminer l'agent prioritaire selon la catégorie principale
+    # Determine the priority agent based on the primary category
     primary_category = categories[0] if categories else "general"
     priority_map = {
         "medicine": "pubmed",

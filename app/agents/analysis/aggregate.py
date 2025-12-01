@@ -1,13 +1,13 @@
 """
-Agent d'agrégation finale des résultats d'analyse.
+Final aggregation agent for analysis results.
 
-Cet agent agrège tous les résultats pour créer un tableau final avec:
-- Chaque argument
-- Ses points pour et contre
-- Une note de fiabilité basée sur la qualité des sources et le consensus
+This agent aggregates all results to create a final table with:
+- Each argument
+- Its supporting and contradicting points
+- A reliability score based on source quality and consensus
 
-Utilise MCP pour réduire la consommation de tokens en utilisant des références
-et des résumés plutôt que d'envoyer tout le contenu dans le prompt.
+Uses MCP to reduce token consumption by using references
+and summaries rather than sending all content in the prompt.
 """
 from typing import List, Dict
 import json
@@ -16,94 +16,94 @@ from ...config import get_settings
 
 def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
     """
-    Agrège les résultats de l'analyse pour créer un tableau final.
-    
-    Pour chaque argument, calcule une note de fiabilité basée sur:
-    - Le nombre de sources qui soutiennent ou contredisent
-    - La qualité des sources (scientifiques vs généralistes)
-    - Le consensus entre les sources
-    - Le ton de l'argument (affirmatif vs conditionnel)
-    
+    Aggregate analysis results to create a final table.
+
+    For each argument, calculates a reliability score based on:
+    - Number of sources that support or contradict
+    - Source quality (scientific vs general)
+    - Consensus among sources
+    - Argument tone (affirmative vs conditional)
+
     Args:
-        items: Liste de dictionnaires contenant:
-            - "argument": texte de l'argument
-            - "pros": liste de points pour
-            - "cons": liste de points contre
-            - "stance": "affirmatif" ou "conditionnel" (optionnel)
-        video_id: Identifiant de la vidéo (optionnel)
-            
+        items: List of dictionaries containing:
+            - "argument": argument text
+            - "pros": list of supporting points
+            - "cons": list of contradicting points
+            - "stance": "affirmatif" or "conditionnel" (optional)
+        video_id: Video identifier (optional)
+
     Returns:
-        Dictionnaire avec le schéma:
+        Dictionary with schema:
         {
             "arguments": [
                 {
                     "argument": str,
                     "pros": [{"claim": str, "source": str}],
                     "cons": [{"claim": str, "source": str}],
-                    "reliability": float (0.0 à 1.0),
-                    "stance": str ("affirmatif" ou "conditionnel")
+                    "reliability": float (0.0 to 1.0),
+                    "stance": str ("affirmatif" or "conditionnel")
                 }
             ]
         }
     """
     settings = get_settings()
-    
+
     if not settings.openai_api_key:
-        raise ValueError("OPENAI_API_KEY non configurée dans les variables d'environnement")
-    
+        raise ValueError("OPENAI_API_KEY not configured in environment variables")
+
     if not items:
         return {"arguments": []}
-    
+
     client = OpenAI(api_key=settings.openai_api_key)
-    
-    # Préparation optimisée du contexte pour l'agrégation
-    # On limite la taille des pros/cons pour réduire les tokens
+
+    # Optimized context preparation for aggregation
+    # Limit size of pros/cons to reduce tokens
     items_context = []
     for item in items:
-        # Limite le nombre de pros/cons par argument
+        # Limit number of pros/cons per argument
         pros = item.get("pros", [])[:5]  # Max 5 pros
         cons = item.get("cons", [])[:5]  # Max 5 cons
-        
-        # Limite la longueur de chaque claim
+
+        # Limit length of each claim
         optimized_pros = []
         for pro in pros:
-            claim = pro.get("claim", "")[:200]  # Max 200 caractères par claim
+            claim = pro.get("claim", "")[:200]  # Max 200 characters per claim
             optimized_pros.append({
                 "claim": claim,
                 "source": pro.get("source", "")
             })
-        
+
         optimized_cons = []
         for con in cons:
-            claim = con.get("claim", "")[:200]  # Max 200 caractères par claim
+            claim = con.get("claim", "")[:200]  # Max 200 characters per claim
             optimized_cons.append({
                 "claim": claim,
                 "source": con.get("source", "")
             })
-        
+
         items_context.append({
-            "argument": item.get("argument", "")[:300],  # Max 300 caractères pour l'argument
+            "argument": item.get("argument", "")[:300],  # Max 300 characters for argument
             "pros": optimized_pros,
             "cons": optimized_cons,
             "stance": item.get("stance", "affirmatif")
         })
-    
-    # Construction du texte pour le prompt (format compact)
+
+    # Build text for prompt (compact format)
     items_text = json.dumps(items_context, ensure_ascii=False, separators=(',', ':'))
-    
-    # Prompt optimisé (plus court)
-    system_prompt = """Tu es un expert en évaluation de la fiabilité d'arguments scientifiques.
-Agrège les résultats d'analyse et calcule une note de fiabilité (0.0-1.0) pour chaque argument.
 
-Critères de notation:
-- 0.0-0.3: Très faible (peu de sources, contradictions majeures)
-- 0.4-0.6: Moyenne (quelques sources, consensus partiel)
-- 0.7-0.8: Bonne (plusieurs sources fiables, consensus relatif)
-- 0.9-1.0: Très haute (nombreuses sources scientifiques, fort consensus)
+    # Optimized prompt (shorter)
+    system_prompt = """You are an expert in evaluating the reliability of scientific arguments.
+Aggregate analysis results and calculate a reliability score (0.0-1.0) for each argument.
 
-Facteurs: nombre de sources, consensus, qualité (scientifique > généraliste), ton, équilibre pros/cons.
+Scoring criteria:
+- 0.0-0.3: Very low (few sources, major contradictions)
+- 0.4-0.6: Average (some sources, partial consensus)
+- 0.7-0.8: Good (several reliable sources, relative consensus)
+- 0.9-1.0: Very high (numerous scientific sources, strong consensus)
 
-Format JSON:
+Factors: number of sources, consensus, quality (scientific > general), tone, pros/cons balance.
+
+JSON format:
 {
   "arguments": [
     {
@@ -111,19 +111,19 @@ Format JSON:
       "pros": [{"claim": "...", "source": "..."}],
       "cons": [{"claim": "...", "source": "..."}],
       "reliability": 0.75,
-      "stance": "affirmatif" ou "conditionnel"
+      "stance": "affirmatif" or "conditionnel"
     }
   ]
 }"""
 
-    # Limite à 10000 caractères (réduit de 15000 grâce à l'optimisation)
+    # Limit to 10000 characters (reduced from 15000 thanks to optimization)
     truncated_items = items_text[:10000]
-    
-    user_prompt = f"""Agrège les résultats suivants et calcule les notes de fiabilité:
+
+    user_prompt = f"""Aggregate the following results and calculate reliability scores:
 
 {truncated_items}
 
-Retourne uniquement le JSON, sans texte supplémentaire."""
+Return only JSON, no additional text."""
 
     try:
         response = client.chat.completions.create(
@@ -132,40 +132,40 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.2,  # Température très basse pour plus de cohérence dans les scores
+            temperature=0.2,  # Very low temperature for more consistent scores
             response_format={"type": "json_object"}
         )
-        
-        # Parse la réponse JSON
+
+        # Parse JSON response
         content = response.choices[0].message.content
         parsed = json.loads(content)
-        
-        # Validation et nettoyage
+
+        # Validation and cleanup
         validated_arguments = []
-        
+
         if isinstance(parsed, dict) and "arguments" in parsed:
             for arg in parsed["arguments"]:
                 if isinstance(arg, dict) and "argument" in arg:
-                    # Validation de la note de fiabilité
+                    # Validate reliability score
                     reliability = arg.get("reliability", 0.5)
                     if not isinstance(reliability, (int, float)):
                         reliability = 0.5
-                    reliability = max(0.0, min(1.0, float(reliability)))  # Clamp entre 0 et 1
-                    
-                    # Validation des pros et cons
+                    reliability = max(0.0, min(1.0, float(reliability)))  # Clamp between 0 and 1
+
+                    # Validate pros and cons
                     pros = arg.get("pros", [])
                     if not isinstance(pros, list):
                         pros = []
-                    
+
                     cons = arg.get("cons", [])
                     if not isinstance(cons, list):
                         cons = []
-                    
-                    # Validation du stance
+
+                    # Validate stance
                     stance = arg.get("stance", "affirmatif")
                     if stance not in ["affirmatif", "conditionnel"]:
                         stance = "affirmatif"
-                    
+
                     validated_arguments.append({
                         "argument": arg["argument"].strip(),
                         "pros": pros,
@@ -173,24 +173,24 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
                         "reliability": reliability,
                         "stance": stance
                     })
-        
-        # Si l'agrégation a échoué, on retourne au moins les données brutes
+
+        # If aggregation failed, return at least the raw data
         if not validated_arguments and items:
             for item in items:
-                # Compter les VRAIES sources (web, scientific, statistical) au lieu des pros/cons
+                # Count REAL sources (web, scientific, statistical) instead of pros/cons
                 sources = item.get("sources", {})
                 num_web = len(sources.get("web", []))
                 num_scientific = len(sources.get("scientific", []))
                 num_statistical = len(sources.get("statistical", []))
                 num_sources = num_web + num_scientific + num_statistical
-                
-                # Si aucune source, fiabilité = 0.0 pour indiquer l'absence de sources
+
+                # If no sources, reliability = 0.0 to indicate absence of sources
                 if num_sources == 0:
                     reliability = 0.0
                 else:
-                    # 0.3 de base + 0.1 par source, max 0.9
+                    # Base 0.3 + 0.1 per source, max 0.9
                     reliability = min(0.9, 0.3 + (num_sources * 0.1))
-                
+
                 validated_arguments.append({
                     "argument": item.get("argument", ""),
                     "pros": item.get("pros", []),
@@ -198,43 +198,43 @@ Retourne uniquement le JSON, sans texte supplémentaire."""
                     "reliability": reliability,
                     "stance": item.get("stance", "affirmatif")
                 })
-        
+
         return {
             "arguments": validated_arguments
         }
-        
+
     except json.JSONDecodeError as e:
-        print(f"Erreur de parsing JSON de la réponse OpenAI (agrégation): {e}")
-        # Fallback: retourner les données brutes avec fiabilité basique
+        print(f"JSON parsing error from OpenAI response (aggregation): {e}")
+        # Fallback: return raw data with basic reliability
         return _fallback_aggregation(items)
     except Exception as e:
-        print(f"Erreur lors de l'agrégation: {e}")
+        print(f"Error during aggregation: {e}")
         return _fallback_aggregation(items)
 
 
 def _fallback_aggregation(items: List[Dict]) -> Dict:
     """
-    Agrégation de fallback en cas d'erreur de l'API.
-    
-    Calcule une fiabilité basique basée sur le nombre de sources.
+    Fallback aggregation in case of API error.
+
+    Calculates basic reliability based on number of sources.
     """
     arguments = []
-    
+
     for item in items:
-        # Compter les VRAIES sources (web, scientific, statistical) au lieu des pros/cons
+        # Count REAL sources (web, scientific, statistical) instead of pros/cons
         sources = item.get("sources", {})
         num_web = len(sources.get("web", []))
         num_scientific = len(sources.get("scientific", []))
         num_statistical = len(sources.get("statistical", []))
         num_sources = num_web + num_scientific + num_statistical
-        
-        # Si aucune source, fiabilité = 0.0 pour indiquer l'absence de sources
+
+        # If no sources, reliability = 0.0 to indicate absence of sources
         if num_sources == 0:
             reliability = 0.0
         else:
-            # Fiabilité basique: 0.3 de base + 0.1 par source, maximum 0.9
+            # Basic reliability: base 0.3 + 0.1 per source, maximum 0.9
             reliability = min(0.9, 0.3 + (num_sources * 0.1))
-        
+
         arguments.append({
             "argument": item.get("argument", ""),
             "pros": item.get("pros", []),
@@ -242,5 +242,5 @@ def _fallback_aggregation(items: List[Dict]) -> Dict:
             "reliability": reliability,
             "stance": item.get("stance", "affirmatif")
         })
-    
+
     return {"arguments": arguments}

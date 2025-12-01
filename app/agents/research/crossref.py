@@ -1,45 +1,45 @@
 """
-Agent de recherche pour CrossRef.
+Research agent for CrossRef.
 
-CrossRef fournit des métadonnées pour les publications académiques via DOI,
-incluant les citations, financements, licences et données bibliographiques.
+CrossRef provides metadata for academic publications via DOI,
+including citations, funding, licenses and bibliographic data.
 
 API Documentation: https://www.crossref.org/documentation/retrieve-metadata/rest-api/
-Rate Limits: Variable selon l'utilisation "polie" (avec contact email)
+Rate Limits: Variable based on "polite" usage (with contact email)
 """
 from typing import List, Dict, Optional
 import requests
 
 def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
-    Recherche des publications académiques via CrossRef.
+    Search for academic publications via CrossRef.
 
-    CrossRef est utile pour obtenir des métadonnées complètes et des informations
-    sur les citations pour valider la crédibilité des sources.
+    CrossRef is useful for obtaining complete metadata and citation
+    information to validate source credibility.
 
     Args:
-        query: Requête de recherche (idéalement en anglais)
-        max_results: Nombre maximum de résultats (défaut: 5)
+        query: Search query (ideally in English)
+        max_results: Maximum number of results (default: 5)
 
     Returns:
-        Liste de dictionnaires contenant:
-        - title: Titre de la publication
-        - url: URL vers la publication (via DOI)
-        - snippet: Résumé/abstract
+        List of dictionaries containing:
+        - title: Publication title
+        - url: URL to the publication (via DOI)
+        - snippet: Abstract/summary
         - source: "CrossRef"
-        - doi: DOI de la publication
-        - type: Type de publication (journal-article, book-chapter, etc.)
-        - year: Année de publication
-        - citations: Nombre de citations
-        - publisher: Éditeur
-        - authors: Liste des auteurs
+        - doi: Publication DOI
+        - type: Publication type (journal-article, book-chapter, etc.)
+        - year: Publication year
+        - citations: Number of citations
+        - publisher: Publisher
+        - authors: List of authors
 
     Raises:
-        Exception: Si la requête échoue
+        Exception: If the query fails
     """
     base_url = "https://api.crossref.org/works"
 
-    # Headers "polite" pour de meilleures rate limits
+    # "Polite" headers for better rate limits
     headers = {
         "User-Agent": "VideoAnalyzerWorkflow/1.0 (mailto:research@example.com)"
     }
@@ -58,13 +58,13 @@ def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         articles = []
 
         if "message" not in data or "items" not in data["message"]:
-            print(f"[CrossRef] Aucun résultat pour: {query}")
+            print(f"[CrossRef] No results for: {query}")
             return []
 
         for item in data["message"]["items"]:
             # Extract title
             title_list = item.get("title", [])
-            title = title_list[0] if title_list else "Sans titre"
+            title = title_list[0] if title_list else "Untitled"
 
             # Extract DOI and URL
             doi = item.get("DOI", "")
@@ -120,29 +120,29 @@ def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
 
             articles.append(article)
 
-        print(f"[CrossRef] {len(articles)} publications trouvées pour: {query}")
+        print(f"[CrossRef] {len(articles)} publications found for: {query}")
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[CrossRef] Timeout lors de la recherche: {query}")
+        print(f"[CrossRef] Timeout during search: {query}")
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[CrossRef] Erreur lors de la recherche: {e}")
+        print(f"[CrossRef] Error during search: {e}")
         return []
     except Exception as e:
-        print(f"[CrossRef] Erreur inattendue: {e}")
+        print(f"[CrossRef] Unexpected error: {e}")
         return []
 
 
 def get_citation_count(doi: str) -> Optional[int]:
     """
-    Récupère le nombre de citations pour un DOI donné.
+    Retrieve the citation count for a given DOI.
 
     Args:
-        doi: DOI de la publication
+        doi: Publication DOI
 
     Returns:
-        Nombre de citations ou None si erreur
+        Number of citations or None if error
     """
     url = f"https://api.crossref.org/works/{doi}"
     headers = {
@@ -155,5 +155,5 @@ def get_citation_count(doi: str) -> Optional[int]:
         data = response.json()
         return data.get("message", {}).get("is-referenced-by-count", 0)
     except Exception as e:
-        print(f"[CrossRef] Erreur lors de la récupération des citations pour {doi}: {e}")
+        print(f"[CrossRef] Error retrieving citations for {doi}: {e}")
         return None

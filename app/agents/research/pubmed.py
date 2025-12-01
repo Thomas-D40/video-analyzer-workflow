@@ -1,8 +1,8 @@
 """
-Agent de recherche pour PubMed (NCBI).
+Research agent for PubMed (NCBI).
 
-PubMed est la base de données de référence pour la littérature biomédicale
-avec ~39 millions de citations d'articles de MEDLINE et autres sources.
+PubMed is the reference database for biomedical literature
+with ~39 million citations from MEDLINE and other sources.
 
 API Documentation: https://www.ncbi.nlm.nih.gov/home/develop/api/
 E-utilities: https://www.ncbi.nlm.nih.gov/books/NBK25500/
@@ -15,39 +15,39 @@ from ...config import get_settings
 
 def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
-    Recherche des articles biomédicaux sur PubMed.
+    Search for biomedical articles on PubMed.
 
-    PubMed est la source la plus autoritaire pour les affirmations liées à la santé,
-    médecine, biologie et sciences biomédicales.
+    PubMed is the most authoritative source for health-related claims,
+    medicine, biology and biomedical sciences.
 
     Args:
-        query: Requête de recherche (idéalement en anglais)
-        max_results: Nombre maximum de résultats (défaut: 5)
+        query: Search query (ideally in English)
+        max_results: Maximum number of results (default: 5)
 
     Returns:
-        Liste de dictionnaires contenant:
-        - title: Titre de l'article
-        - url: URL vers l'article sur PubMed
-        - snippet: Résumé/abstract de l'article
+        List of dictionaries containing:
+        - title: Article title
+        - url: URL to the article on PubMed
+        - snippet: Article abstract/summary
         - source: "PubMed"
         - pmid: PubMed ID
-        - journal: Nom du journal
-        - year: Année de publication
-        - authors: Liste des auteurs
+        - journal: Journal name
+        - year: Publication year
+        - authors: List of authors
 
     Raises:
-        Exception: Si la requête échoue après plusieurs tentatives
+        Exception: If the query fails after several attempts
     """
     settings = get_settings()
     base_url_search = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     base_url_fetch = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
-    # API key (optionnel mais recommandé pour des limites plus élevées)
-    # Sans clé: 3 requêtes/sec, avec clé: 10 requêtes/sec
+    # API key (optional but recommended for higher limits)
+    # Without key: 3 requests/sec, with key: 10 requests/sec
     api_key = getattr(settings, 'ncbi_api_key', None)
 
     try:
-        # Étape 1: Recherche pour obtenir les PMIDs
+        # Step 1: Search to get PMIDs
         search_params = {
             "db": "pubmed",
             "term": query,
@@ -62,17 +62,17 @@ def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         response.raise_for_status()
         search_data = response.json()
 
-        # Extraire les PMIDs
+        # Extract PMIDs
         pmids = search_data.get("esearchresult", {}).get("idlist", [])
 
         if not pmids:
-            print(f"[PubMed] Aucun résultat pour: {query}")
+            print(f"[PubMed] No results for: {query}")
             return []
 
         # Respect rate limits
-        time.sleep(0.34 if not api_key else 0.11)  # 3 req/s sans clé, 10 req/s avec clé
+        time.sleep(0.34 if not api_key else 0.11)  # 3 req/s without key, 10 req/s with key
 
-        # Étape 2: Récupérer les détails des articles
+        # Step 2: Fetch article details
         fetch_params = {
             "db": "pubmed",
             "id": ",".join(pmids),
@@ -85,7 +85,7 @@ def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         response = requests.get(base_url_fetch, params=fetch_params, timeout=15)
         response.raise_for_status()
 
-        # Parser le XML
+        # Parse XML
         root = ET.fromstring(response.content)
         articles = []
 
@@ -97,13 +97,13 @@ def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
 
                 # Title
                 title_elem = article_elem.find(".//ArticleTitle")
-                title = title_elem.text if title_elem is not None else "Sans titre"
+                title = title_elem.text if title_elem is not None else "Untitled"
 
                 # Abstract
                 abstract_texts = article_elem.findall(".//AbstractText")
                 abstract = " ".join([abs_text.text for abs_text in abstract_texts if abs_text.text])
                 if not abstract:
-                    abstract = "Pas de résumé disponible"
+                    abstract = "No abstract available"
 
                 # Journal
                 journal_elem = article_elem.find(".//Journal/Title")
@@ -139,21 +139,21 @@ def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
                 articles.append(article)
 
             except Exception as e:
-                print(f"[PubMed] Erreur lors du parsing d'un article: {e}")
+                print(f"[PubMed] Error parsing article: {e}")
                 continue
 
-        print(f"[PubMed] {len(articles)} articles trouvés pour: {query}")
+        print(f"[PubMed] {len(articles)} articles found for: {query}")
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[PubMed] Timeout lors de la recherche: {query}")
+        print(f"[PubMed] Timeout during search: {query}")
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[PubMed] Erreur lors de la recherche: {e}")
+        print(f"[PubMed] Error during search: {e}")
         return []
     except ET.ParseError as e:
-        print(f"[PubMed] Erreur de parsing XML: {e}")
+        print(f"[PubMed] XML parsing error: {e}")
         return []
     except Exception as e:
-        print(f"[PubMed] Erreur inattendue: {e}")
+        print(f"[PubMed] Unexpected error: {e}")
         return []

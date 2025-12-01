@@ -6,88 +6,88 @@ from ...config import get_settings
 
 def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = "") -> Dict[str, List[Dict]]:
     """
-    Extrait les arguments pour et contre depuis une liste d'articles scientifiques.
-    
-    Analyse les articles pour identifier:
-    - Les points qui soutiennent l'argument (pros)
-    - Les points qui le contredisent ou le mettent en question (cons)
-    - Pour chaque point, associe la source (URL de l'article)
-    
+    Extract supporting and contradicting arguments from a list of scientific articles.
+
+    Analyzes articles to identify:
+    - Points that support the argument (pros)
+    - Points that contradict or question it (cons)
+    - For each point, associates the source (article URL)
+
     Args:
-        argument: Texte de l'argument à analyser
-        articles: Liste d'articles avec les champs "title", "url", "snippet"
-        argument_id: Identifiant unique de l'argument (optionnel)
-        
+        argument: Text of the argument to analyze
+        articles: List of articles with fields "title", "url", "snippet"
+        argument_id: Unique identifier for the argument (optional)
+
     Returns:
-        Dictionnaire avec:
-        - "pros": liste de {"claim": str, "source": str}
-        - "cons": liste de {"claim": str, "source": str}
+        Dictionary with:
+        - "pros": list of {"claim": str, "source": str}
+        - "cons": list of {"claim": str, "source": str}
     """
     settings = get_settings()
-    
+
     if not settings.openai_api_key:
-        raise ValueError("OPENAI_API_KEY non configurée dans les variables d'environnement")
-    
+        raise ValueError("OPENAI_API_KEY not configured in environment variables")
+
     print(f"[DEBUG extract_pros_cons] Argument: {argument[:50]}...")
-    print(f"[DEBUG extract_pros_cons] Nombre d'articles reçus: {len(articles)}")
-    
+    print(f"[DEBUG extract_pros_cons] Number of articles received: {len(articles)}")
+
     if not argument or not articles:
-        print(f"[DEBUG extract_pros_cons] Retour vide: argument={bool(argument)}, articles={len(articles) if articles else 0}")
+        print(f"[DEBUG extract_pros_cons] Empty return: argument={bool(argument)}, articles={len(articles) if articles else 0}")
         return {"pros": [], "cons": []}
-    
-    # Génération d'un ID unique pour l'argument si non fourni
+
+    # Generate a unique ID for the argument if not provided
     if not argument_id:
         argument_id = hashlib.md5(argument.encode()).hexdigest()[:8]
-    
-    # Formatage du contexte des articles
+
+    # Format articles context
     articles_context = ""
     current_length = 0
     max_length = 6000
     
     for article in articles:
-        article_text = f"Article: {article.get('title', '')}\nURL: {article.get('url', '')}\nRésumé: {article.get('snippet', '')}\n\n"
-        
+        article_text = f"Article: {article.get('title', '')}\nURL: {article.get('url', '')}\nSummary: {article.get('snippet', '')}\n\n"
+
         if current_length + len(article_text) > max_length:
             break
-        
+
         articles_context += article_text
         current_length += len(article_text)
-        
+
     if len(articles) > 0 and not articles_context:
-         # Fallback si le premier article est trop long (peu probable avec snippet)
-         articles_context = f"Article: {articles[0].get('title', '')}\nURL: {articles[0].get('url', '')}\nRésumé: {articles[0].get('snippet', '')[:max_length]}\n\n"
-    
+         # Fallback if the first article is too long (unlikely with snippet)
+         articles_context = f"Article: {articles[0].get('title', '')}\nURL: {articles[0].get('url', '')}\nSummary: {articles[0].get('snippet', '')[:max_length]}\n\n"
+
     client = OpenAI(api_key=settings.openai_api_key)
-    
-    # Prompt optimisé (plus court grâce aux résumés MCP)
-    system_prompt = """Tu es un expert en analyse scientifique et critique d'arguments.
-Analyse des articles scientifiques pour identifier les points qui soutiennent (pros) ou contredisent (cons) un argument.
 
-**RÈGLES STRICTES DE VÉRIFICATION :**
-1.  **Preuve Explicite Requise** : Chaque point ("claim") DOIT être explicitement soutenu par le texte d'un article fourni.
-2.  **Pas d'Invention** : Si aucun article ne mentionne un point, NE L'INVENTE PAS.
-3.  **Citation Obligatoire** : Chaque claim doit être associé à l'URL exacte de l'article qui le contient.
-4.  **Pertinence** : Ne retiens que les points qui sont directement liés à l'argument analysé.
+    # Optimized prompt (shorter thanks to MCP summaries)
+    system_prompt = """You are an expert in scientific analysis and argument critique.
+Analyze scientific articles to identify points that support (pros) or contradict (cons) an argument.
 
-Pour chaque article, identifie:
-- Les affirmations qui SUPPORTENT l'argument (pros)
-- Les affirmations qui CONTREDISENT ou QUESTIONNENT l'argument (cons)
+**STRICT VERIFICATION RULES:**
+1.  **Explicit Evidence Required**: Each point ("claim") MUST be explicitly supported by the text of a provided article.
+2.  **No Invention**: If no article mentions a point, DO NOT INVENT IT.
+3.  **Citation Required**: Each claim must be associated with the exact URL of the article containing it.
+4.  **Relevance**: Only retain points directly related to the analyzed argument.
 
-Réponds en JSON avec ce format exact:
+For each article, identify:
+- Claims that SUPPORT the argument (pros)
+- Claims that CONTRADICT or QUESTION the argument (cons)
+
+Respond in JSON with this exact format:
 {
-    "pros": [{"claim": "description du point (avec citation implicite)", "source": "URL de l'article"}],
-    "cons": [{"claim": "description du point (avec citation implicite)", "source": "URL de l'article"}]
+    "pros": [{"claim": "point description (with implicit citation)", "source": "article URL"}],
+    "cons": [{"claim": "point description (with implicit citation)", "source": "article URL"}]
 }
 
-Si aucun article ne contient d'informations pertinentes, retourne des listes vides."""
+If no article contains relevant information, return empty lists."""
 
 
-    user_prompt = f"""Argument à analyser: {argument}
+    user_prompt = f"""Argument to analyze: {argument}
 
-Articles scientifiques:
+Scientific articles:
 {articles_context}
 
-Analyse ces articles et extrais les points pour (pros) et contre (cons) cet argument."""
+Analyze these articles and extract supporting (pros) and contradicting (cons) points for this argument."""
 
 
     try:
@@ -100,19 +100,19 @@ Analyse ces articles et extrais les points pour (pros) et contre (cons) cet argu
             temperature=0.3,
             response_format={"type": "json_object"}
         )
-        
-        # Parse la réponse JSON
+
+        # Parse JSON response
         content = response.choices[0].message.content
         result = json.loads(content)
-        
+
         return {
             "pros": result.get("pros", []),
             "cons": result.get("cons", [])
         }
-        
+
     except json.JSONDecodeError as e:
-        print(f"Erreur de parsing JSON de la réponse OpenAI (pros/cons): {e}")
+        print(f"JSON parsing error from OpenAI response (pros/cons): {e}")
         return {"pros": [], "cons": []}
     except Exception as e:
-        print(f"Erreur lors de l'extraction des pros/cons: {e}")
+        print(f"Error during pros/cons extraction: {e}")
         return {"pros": [], "cons": []}

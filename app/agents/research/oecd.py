@@ -1,9 +1,9 @@
 """
-Agent de recherche pour les données statistiques de l'OECD.
+Research agent for OECD statistical data.
 
-L'OECD (Organisation for Economic Co-operation and Development) fournit
-des données statistiques sur les pays développés: GDP, inflation, emploi,
-éducation, santé, innovation, climat.
+The OECD (Organisation for Economic Co-operation and Development) provides
+statistical data on developed countries: GDP, inflation, employment,
+education, health, innovation, climate.
 
 API Documentation: https://data-explorer.oecd.org/
 SDMX API: https://stats.oecd.org/SDMX-JSON/
@@ -14,31 +14,31 @@ from ...config import get_settings
 
 def search_oecd_data(query: str, max_results: int = 3) -> List[Dict[str, str]]:
     """
-    Recherche des indicateurs statistiques dans la base OECD.
+    Search for statistical indicators in the OECD database.
 
-    L'OECD est la source de référence pour les statistiques économiques
-    et sociales des pays développés (membres de l'OECD).
+    The OECD is the reference source for economic and social statistics
+    of developed countries (OECD members).
 
     Args:
-        query: Mots-clés de recherche (ex: "GDP growth", "unemployment rate")
-        max_results: Nombre maximum de résultats (défaut: 3)
+        query: Search keywords (e.g., "GDP growth", "unemployment rate")
+        max_results: Maximum number of results (default: 3)
 
     Returns:
-        Liste de dictionnaires contenant:
-        - title: Nom de l'indicateur
-        - url: URL vers les données
-        - snippet: Description de l'indicateur
+        List of dictionaries containing:
+        - title: Indicator name
+        - url: URL to the data
+        - snippet: Indicator description
         - source: "OECD"
-        - indicator_code: Code de l'indicateur
-        - dataset: Nom du dataset
+        - indicator_code: Indicator code
+        - dataset: Dataset name
 
     Note:
-        L'API OECD est complexe et nécessite des codes d'indicateurs spécifiques.
-        Cette implémentation utilise une approche simplifiée avec des indicateurs
-        prédéfinis courants.
+        The OECD API is complex and requires specific indicator codes.
+        This implementation uses a simplified approach with common
+        predefined indicators.
     """
-    # Mapping de mots-clés vers des indicateurs OECD courants
-    # Pour une implémentation complète, utiliser l'API de recherche OECD
+    # Mapping of keywords to common OECD indicators
+    # For a complete implementation, use the OECD search API
     keyword_mapping = {
         "gdp": {
             "code": "GDP",
@@ -90,10 +90,10 @@ def search_oecd_data(query: str, max_results: int = 3) -> List[Dict[str, str]]:
         }
     }
 
-    # Normaliser la requête
+    # Normalize the query
     query_lower = query.lower()
 
-    # Trouver les indicateurs correspondants
+    # Find matching indicators
     results = []
     for keyword, indicator in keyword_mapping.items():
         if keyword in query_lower:
@@ -110,9 +110,9 @@ def search_oecd_data(query: str, max_results: int = 3) -> List[Dict[str, str]]:
             if len(results) >= max_results:
                 break
 
-    # Si aucun résultat spécifique, retourner des indicateurs généraux
+    # If no specific results, return general indicators
     if not results:
-        # Retourner les 3 indicateurs les plus courants
+        # Return the 3 most common indicators
         general_indicators = ["gdp", "unemployment", "inflation"]
         for key in general_indicators[:max_results]:
             indicator = keyword_mapping[key]
@@ -126,28 +126,28 @@ def search_oecd_data(query: str, max_results: int = 3) -> List[Dict[str, str]]:
             }
             results.append(result)
 
-    print(f"[OECD] {len(results)} indicateurs trouvés pour: {query}")
+    print(f"[OECD] {len(results)} indicators found for: {query}")
     return results
 
 
 def get_oecd_indicator_data(indicator_code: str, countries: List[str] = None) -> Dict:
     """
-    Récupère les données d'un indicateur OECD spécifique.
+    Retrieve data for a specific OECD indicator.
 
     Args:
-        indicator_code: Code de l'indicateur OECD
-        countries: Liste de codes pays (ex: ["USA", "FRA", "DEU"])
+        indicator_code: OECD indicator code
+        countries: List of country codes (e.g., ["USA", "FRA", "DEU"])
 
     Returns:
-        Dictionnaire avec les données de l'indicateur
+        Dictionary with indicator data
 
     Note:
-        Cette fonction est un placeholder pour une implémentation complète.
-        L'API SDMX de l'OECD nécessite une connaissance des structures de données.
+        This function is a placeholder for a complete implementation.
+        The OECD SDMX API requires knowledge of data structures.
     """
-    # Pour une implémentation complète, utiliser l'API SDMX
+    # For a complete implementation, use the SDMX API
     # https://stats.oecd.org/SDMX-JSON/
-    print(f"[OECD] Récupération des données pour: {indicator_code}")
+    print(f"[OECD] Retrieving data for: {indicator_code}")
     return {
         "indicator": indicator_code,
         "message": "Full SDMX API implementation required for detailed data retrieval"

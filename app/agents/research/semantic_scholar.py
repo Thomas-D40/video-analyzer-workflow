@@ -1,8 +1,8 @@
 """
-Agent de recherche pour Semantic Scholar.
+Research agent for Semantic Scholar.
 
-Semantic Scholar est une base de données académique alimentée par l'IA
-qui couvre ~200M d'articles scientifiques à travers toutes les disciplines.
+Semantic Scholar is an AI-powered academic database
+that covers ~200M scientific articles across all disciplines.
 
 API Documentation: https://www.semanticscholar.org/product/api
 Rate Limits: 100 requests per 5 minutes (no API key required)
@@ -13,44 +13,44 @@ import time
 
 def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
-    Recherche des articles académiques sur Semantic Scholar.
+    Search for academic articles on Semantic Scholar.
 
-    Semantic Scholar utilise l'IA pour identifier les articles les plus pertinents
-    à travers toutes les disciplines académiques (sciences, médecine, sciences sociales, etc.)
+    Semantic Scholar uses AI to identify the most relevant articles
+    across all academic disciplines (sciences, medicine, social sciences, etc.)
 
     Args:
-        query: Requête de recherche (idéalement en anglais)
-        max_results: Nombre maximum de résultats (défaut: 5)
+        query: Search query (ideally in English)
+        max_results: Maximum number of results (default: 5)
 
     Returns:
-        Liste de dictionnaires contenant:
-        - title: Titre de l'article
-        - url: URL vers l'article sur Semantic Scholar
-        - snippet: Résumé/abstract de l'article
+        List of dictionaries containing:
+        - title: Article title
+        - url: URL to the article on Semantic Scholar
+        - snippet: Article abstract/summary
         - source: "Semantic Scholar"
-        - year: Année de publication
-        - citations: Nombre de citations
-        - authors: Liste des auteurs
+        - year: Publication year
+        - citations: Number of citations
+        - authors: List of authors
 
     Raises:
-        Exception: Si la requête échoue après plusieurs tentatives
+        Exception: If the query fails after several attempts
     """
     base_url = "https://api.semanticscholar.org/graph/v1/paper/search"
 
-    # Paramètres de recherche
+    # Search parameters
     params = {
         "query": query,
         "limit": max_results,
         "fields": "title,abstract,year,citationCount,authors,url,openAccessPdf"
     }
 
-    # Headers recommandés (optionnel mais poli)
+    # Recommended headers (optional but polite)
     headers = {
         "User-Agent": "VideoAnalyzerWorkflow/1.0 (Research Tool)"
     }
 
     try:
-        # Requête avec timeout
+        # Request with timeout
         response = requests.get(base_url, params=params, headers=headers, timeout=10)
         response.raise_for_status()
 
@@ -58,7 +58,7 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, 
         articles = []
 
         if "data" not in data or not data["data"]:
-            print(f"[Semantic Scholar] Aucun résultat pour: {query}")
+            print(f"[Semantic Scholar] No results for: {query}")
             return []
 
         for paper in data["data"]:
@@ -77,7 +77,7 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, 
                 abstract = f"Article from {paper.get('year', 'N/A')} with {paper.get('citationCount', 0)} citations"
 
             article = {
-                "title": paper.get("title", "Sans titre"),
+                "title": paper.get("title", "Untitled"),
                 "url": paper_url,
                 "snippet": abstract[:500],  # Limit snippet length
                 "source": "Semantic Scholar",
@@ -89,29 +89,29 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, 
 
             articles.append(article)
 
-        print(f"[Semantic Scholar] {len(articles)} articles trouvés pour: {query}")
+        print(f"[Semantic Scholar] {len(articles)} articles found for: {query}")
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[Semantic Scholar] Timeout lors de la recherche: {query}")
+        print(f"[Semantic Scholar] Timeout during search: {query}")
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[Semantic Scholar] Erreur lors de la recherche: {e}")
+        print(f"[Semantic Scholar] Error during search: {e}")
         return []
     except Exception as e:
-        print(f"[Semantic Scholar] Erreur inattendue: {e}")
+        print(f"[Semantic Scholar] Unexpected error: {e}")
         return []
 
 
 def get_paper_details(paper_id: str) -> Dict:
     """
-    Récupère les détails complets d'un article par son ID Semantic Scholar.
+    Retrieve full details of an article by its Semantic Scholar ID.
 
     Args:
-        paper_id: ID Semantic Scholar de l'article
+        paper_id: Semantic Scholar ID of the article
 
     Returns:
-        Dictionnaire avec les détails complets de l'article
+        Dictionary with full article details
     """
     url = f"https://api.semanticscholar.org/graph/v1/paper/{paper_id}"
     params = {
@@ -123,5 +123,5 @@ def get_paper_details(paper_id: str) -> Dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"[Semantic Scholar] Erreur lors de la récupération des détails: {e}")
+        print(f"[Semantic Scholar] Error retrieving details: {e}")
         return {}

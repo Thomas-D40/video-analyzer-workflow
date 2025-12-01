@@ -84,35 +84,35 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
             "report_markdown": no_args_message
         }
     
-    # Étape 4 & 5: Recherche et Analyse (avec agents spécialisés)
+    # Step 4 & 5: Research and Analysis (with specialized agents)
     enriched_arguments = []
 
     for arg_data in arguments:
         argument_text = arg_data["argument"]  # Original language
         argument_en = arg_data["argument_en"]  # English for research
 
-        # Étape 4.1: Déterminer la stratégie de recherche selon le domaine
+        # Step 4.1: Determine research strategy based on domain
         # Use English version for classification (more accurate)
         try:
             strategy = get_research_strategy(argument_en)
             selected_agents = strategy["agents"]
             categories = strategy["categories"]
-            print(f"[INFO workflow] Argument classifié: {categories}")
-            print(f"[INFO workflow] Agents sélectionnés: {selected_agents}")
+            print(f"[INFO workflow] Argument classified: {categories}")
+            print(f"[INFO workflow] Agents selected: {selected_agents}")
         except Exception as e:
-            print(f"[ERROR workflow] Erreur stratégie de recherche: {e}")
-            selected_agents = ["semantic_scholar", "crossref", "web"]
+            print(f"[ERROR workflow] Research strategy error: {e}")
+            selected_agents = ["semantic_scholar", "crossref"]
             categories = ["general"]
 
-        # Étape 4.2: Génération de requêtes optimisées pour les agents sélectionnés
+        # Step 4.2: Generate optimized queries for selected agents
         # Use English version for query generation (all APIs work in English)
         queries = {}
         try:
             queries = generate_search_queries(argument_en, agents=selected_agents)
         except Exception as e:
-            print(f"[ERROR workflow] Erreur génération requêtes: {e}")
+            print(f"[ERROR workflow] Query generation error: {e}")
 
-        # Initialiser les collections de sources
+        # Initialize source collections
         all_sources = []
         sources_by_type = {
             "scientific": [],
@@ -120,95 +120,95 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
             "statistical": []
         }
 
-        # Étape 4.3: Exécuter les recherches avec les agents appropriés
+        # Step 4.3: Execute searches with appropriate agents
         # Note: DuckDuckGo web search removed - using only academic and official sources for better quality
 
-        # PubMed (médecine/santé)
+        # PubMed (medicine/health)
         if "pubmed" in selected_agents and queries.get("pubmed"):
             try:
-                print(f"[INFO workflow] Recherche PubMed: '{queries['pubmed'][:50]}...'")
+                print(f"[INFO workflow] PubMed search: '{queries['pubmed'][:50]}...'")
                 pubmed_articles = search_pubmed(queries["pubmed"], max_results=5)
                 sources_by_type["medical"].extend(pubmed_articles)
                 all_sources.extend(pubmed_articles)
                 print(f"[INFO workflow] PubMed: {len(pubmed_articles)} articles")
             except Exception as e:
-                print(f"[ERROR workflow] Erreur recherche PubMed: {e}")
+                print(f"[ERROR workflow] PubMed search error: {e}")
 
-        # ArXiv (sciences exactes)
+        # ArXiv (exact sciences)
         if "arxiv" in selected_agents and queries.get("arxiv"):
             try:
-                print(f"[INFO workflow] Recherche ArXiv: '{queries['arxiv'][:50]}...'")
+                print(f"[INFO workflow] ArXiv search: '{queries['arxiv'][:50]}...'")
                 arxiv_articles = search_arxiv(queries["arxiv"], max_results=5)
                 sources_by_type["scientific"].extend(arxiv_articles)
                 all_sources.extend(arxiv_articles)
                 print(f"[INFO workflow] ArXiv: {len(arxiv_articles)} articles")
             except Exception as e:
-                print(f"[ERROR workflow] Erreur recherche ArXiv: {e}")
+                print(f"[ERROR workflow] ArXiv search error: {e}")
 
-        # Semantic Scholar (toutes disciplines)
+        # Semantic Scholar (all disciplines)
         if "semantic_scholar" in selected_agents and queries.get("semantic_scholar"):
             try:
-                print(f"[INFO workflow] Recherche Semantic Scholar: '{queries['semantic_scholar'][:50]}...'")
+                print(f"[INFO workflow] Semantic Scholar search: '{queries['semantic_scholar'][:50]}...'")
                 ss_articles = search_semantic_scholar(queries["semantic_scholar"], max_results=5)
                 sources_by_type["scientific"].extend(ss_articles)
                 all_sources.extend(ss_articles)
                 print(f"[INFO workflow] Semantic Scholar: {len(ss_articles)} articles")
             except Exception as e:
-                print(f"[ERROR workflow] Erreur recherche Semantic Scholar: {e}")
+                print(f"[ERROR workflow] Semantic Scholar search error: {e}")
 
-        # CrossRef (métadonnées académiques)
+        # CrossRef (academic metadata)
         if "crossref" in selected_agents and queries.get("crossref"):
             try:
-                print(f"[INFO workflow] Recherche CrossRef: '{queries['crossref'][:50]}...'")
+                print(f"[INFO workflow] CrossRef search: '{queries['crossref'][:50]}...'")
                 crossref_articles = search_crossref(queries["crossref"], max_results=3)
                 sources_by_type["scientific"].extend(crossref_articles)
                 all_sources.extend(crossref_articles)
                 print(f"[INFO workflow] CrossRef: {len(crossref_articles)} articles")
             except Exception as e:
-                print(f"[ERROR workflow] Erreur recherche CrossRef: {e}")
+                print(f"[ERROR workflow] CrossRef search error: {e}")
 
-        # OECD (statistiques économiques/sociales)
+        # OECD (economic/social statistics)
         if "oecd" in selected_agents and queries.get("oecd"):
             try:
-                print(f"[INFO workflow] Recherche OECD: '{queries['oecd'][:50]}...'")
+                print(f"[INFO workflow] OECD search: '{queries['oecd'][:50]}...'")
                 oecd_data = search_oecd_data(queries["oecd"], max_results=3)
                 sources_by_type["statistical"].extend(oecd_data)
                 all_sources.extend(oecd_data)
-                print(f"[INFO workflow] OECD: {len(oecd_data)} indicateurs")
+                print(f"[INFO workflow] OECD: {len(oecd_data)} indicators")
             except Exception as e:
-                print(f"[ERROR workflow] Erreur recherche OECD: {e}")
+                print(f"[ERROR workflow] OECD search error: {e}")
 
-        # World Bank (indicateurs de développement)
+        # World Bank (development indicators)
         if "world_bank" in selected_agents and queries.get("world_bank"):
             try:
-                print(f"[INFO workflow] Recherche World Bank: '{queries['world_bank'][:50]}...'")
+                print(f"[INFO workflow] World Bank search: '{queries['world_bank'][:50]}...'")
                 wb_data = search_world_bank_data(queries["world_bank"])
                 sources_by_type["statistical"].extend(wb_data)
                 all_sources.extend(wb_data)
-                print(f"[INFO workflow] World Bank: {len(wb_data)} indicateurs")
+                print(f"[INFO workflow] World Bank: {len(wb_data)} indicators")
             except Exception as e:
-                print(f"[ERROR workflow] Erreur recherche World Bank: {e}")
+                print(f"[ERROR workflow] World Bank search error: {e}")
 
-        # Étape 4.4: Analyse Pros/Cons
+        # Step 4.4: Pros/Cons Analysis
         # Use English version for analysis (sources are in English)
         print(f"[INFO workflow] Argument: {argument_text[:50]}...")
         print(f"[INFO workflow] Total sources: {len(all_sources)}")
 
         try:
             analysis = extract_pros_cons(argument_en, all_sources)
-            print(f"[INFO workflow] Analyse: {len(analysis.get('pros', []))} pros, {len(analysis.get('cons', []))} cons")
+            print(f"[INFO workflow] Analysis: {len(analysis.get('pros', []))} pros, {len(analysis.get('cons', []))} cons")
         except Exception as e:
-            print(f"[ERROR workflow] Erreur analyse pros/cons: {e}")
+            print(f"[ERROR workflow] Pros/cons analysis error: {e}")
             analysis = {"pros": [], "cons": []}
 
-        # Construction de l'objet enrichi
+        # Build enriched object
         enriched_arg = arg_data.copy()
         enriched_arg["categories"] = categories
         enriched_arg["sources"] = sources_by_type
         enriched_arg["analysis"] = analysis
         enriched_arguments.append(enriched_arg)
     
-    # Étape 6: Calcul de fiabilité
+    # Step 6: Reliability calculation
     try:
         items_for_aggregation = [
             {
@@ -216,7 +216,7 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
                 "pros": arg["analysis"].get("pros", []),
                 "cons": arg["analysis"].get("cons", []),
                 "stance": arg.get("stance", "affirmatif"),
-                "sources": arg.get("sources", {})  # Ajouter les sources réelles
+                "sources": arg.get("sources", {})  # Add real sources
             }
             for arg in enriched_arguments
         ]
@@ -235,8 +235,8 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
         arguments = final_arguments
     except Exception:
         arguments = enriched_arguments
-    
-    # Génération du rapport
+
+    # Report generation
     output_data = {
         "video_id": video_id,
         "youtube_url": youtube_url,
@@ -255,11 +255,11 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
         "report_markdown": report_markdown
     }
 
-    # Sauvegarde en base de données
+    # Save to database
     try:
         await save_analysis(video_id, youtube_url, result)
-        print(f"[INFO] Analyse sauvegardée pour {video_id}")
+        print(f"[INFO] Analysis saved for {video_id}")
     except Exception as e:
-        print(f"[ERROR] Erreur sauvegarde DB: {e}")
+        print(f"[ERROR] Database save error: {e}")
 
     return result
