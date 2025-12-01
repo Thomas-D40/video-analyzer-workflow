@@ -16,7 +16,6 @@ from app.utils.youtube import extract_video_id
 from app.utils.transcript import extract_transcript
 from app.agents.extraction import extract_arguments
 from app.agents.research import (
-    search_literature,
     generate_search_queries,
     search_arxiv,
     search_world_bank_data,
@@ -116,34 +115,13 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
         # Initialiser les collections de sources
         all_sources = []
         sources_by_type = {
-            "web": [],
             "scientific": [],
             "medical": [],
             "statistical": []
         }
 
         # Étape 4.3: Exécuter les recherches avec les agents appropriés
-
-        # Web search (toujours inclus)
-        if "web" in selected_agents:
-            try:
-                from app.utils.relevance_filter import filter_relevant_results
-
-                web_query = queries.get("web_query") or argument_text
-                print(f"[INFO workflow] Recherche Web: '{web_query[:50]}...'")
-
-                raw_web_articles = search_literature(web_query, max_results=10)
-                web_articles = filter_relevant_results(
-                    argument_text,
-                    raw_web_articles,
-                    min_score=0.1,
-                    max_results=5
-                )
-                sources_by_type["web"] = web_articles
-                all_sources.extend(web_articles)
-                print(f"[INFO workflow] Web: {len(web_articles)} articles")
-            except Exception as e:
-                print(f"[ERROR workflow] Erreur recherche Web: {e}")
+        # Note: DuckDuckGo web search removed - using only academic and official sources for better quality
 
         # PubMed (médecine/santé)
         if "pubmed" in selected_agents and queries.get("pubmed"):

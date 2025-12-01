@@ -11,19 +11,20 @@ from ...config import get_settings
 
 
 # Mapping des catégories vers les agents de recherche appropriés
+# Only academic and official statistical sources - no general web search
 CATEGORY_AGENTS_MAP = {
-    "medicine": ["pubmed", "semantic_scholar", "crossref", "web"],
-    "biology": ["pubmed", "semantic_scholar", "crossref", "arxiv", "web"],
-    "economics": ["oecd", "world_bank", "semantic_scholar", "crossref", "web"],
-    "physics": ["arxiv", "semantic_scholar", "crossref", "web"],
-    "computer_science": ["arxiv", "semantic_scholar", "crossref", "web"],
-    "mathematics": ["arxiv", "semantic_scholar", "crossref", "web"],
-    "environment": ["arxiv", "semantic_scholar", "crossref", "oecd", "web"],
-    "social_sciences": ["semantic_scholar", "crossref", "oecd", "web"],
-    "psychology": ["pubmed", "semantic_scholar", "crossref", "web"],
-    "education": ["semantic_scholar", "crossref", "oecd", "web"],
-    "politics": ["semantic_scholar", "crossref", "web"],
-    "general": ["semantic_scholar", "crossref", "web"]
+    "medicine": ["pubmed", "semantic_scholar", "crossref"],
+    "biology": ["pubmed", "semantic_scholar", "crossref", "arxiv"],
+    "economics": ["oecd", "world_bank", "semantic_scholar", "crossref"],
+    "physics": ["arxiv", "semantic_scholar", "crossref"],
+    "computer_science": ["arxiv", "semantic_scholar", "crossref"],
+    "mathematics": ["arxiv", "semantic_scholar", "crossref"],
+    "environment": ["arxiv", "semantic_scholar", "crossref", "oecd"],
+    "social_sciences": ["semantic_scholar", "crossref", "oecd"],
+    "psychology": ["pubmed", "semantic_scholar", "crossref"],
+    "education": ["semantic_scholar", "crossref", "oecd"],
+    "politics": ["semantic_scholar", "crossref"],
+    "general": ["semantic_scholar", "crossref"]
 }
 
 

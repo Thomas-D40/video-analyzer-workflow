@@ -38,10 +38,8 @@ The workflow now uses a **topic classifier** to determine which research agents 
   - Free API
   - Best for: poverty, economic development, global statistics
 
-### General Web
-- **DuckDuckGo**: Fact-checking and general sources
-  - Privacy-focused search
-  - Best for: recent news, fact-checks, diverse perspectives
+### Note on Web Search
+General web search (DuckDuckGo) has been **removed** from the system as it often returned low-quality or disconnected sources. The system now relies exclusively on high-quality academic and official sources for better reliability.
 
 ## Workflow Diagram
 
@@ -56,12 +54,12 @@ graph TD
 
     Classify --> Strategy{Determine<br/>Research Strategy}
 
-    Strategy -->|Medicine| MedAgents[PubMed + Semantic Scholar<br/>+ CrossRef + Web]
-    Strategy -->|Biology| BioAgents[PubMed + Semantic Scholar<br/>+ CrossRef + ArXiv + Web]
-    Strategy -->|Economics| EconAgents[OECD + World Bank<br/>+ Semantic Scholar + CrossRef + Web]
-    Strategy -->|Physics/CS/Math| SciAgents[ArXiv + Semantic Scholar<br/>+ CrossRef + Web]
-    Strategy -->|Environment| EnvAgents[ArXiv + Semantic Scholar<br/>+ CrossRef + OECD + Web]
-    Strategy -->|General| GenAgents[Semantic Scholar<br/>+ CrossRef + Web]
+    Strategy -->|Medicine| MedAgents[PubMed + Semantic Scholar<br/>+ CrossRef]
+    Strategy -->|Biology| BioAgents[PubMed + Semantic Scholar<br/>+ CrossRef + ArXiv]
+    Strategy -->|Economics| EconAgents[OECD + World Bank<br/>+ Semantic Scholar + CrossRef]
+    Strategy -->|Physics/CS/Math| SciAgents[ArXiv + Semantic Scholar<br/>+ CrossRef]
+    Strategy -->|Environment| EnvAgents[ArXiv + Semantic Scholar<br/>+ CrossRef + OECD]
+    Strategy -->|General| GenAgents[Semantic Scholar<br/>+ CrossRef]
 
     MedAgents --> QueryGen[Generate Queries<br/>GPT-4o-mini]
     BioAgents --> QueryGen
@@ -78,7 +76,6 @@ graph TD
     Search --> ArXiv[(ArXiv API)]
     Search --> OECD[(OECD Data)]
     Search --> WorldBank[(World Bank API)]
-    Search --> Web[(DuckDuckGo)]
 
     PubMed --> Aggregate[Aggregate Sources]
     SemanticScholar --> Aggregate
@@ -86,7 +83,6 @@ graph TD
     ArXiv --> Aggregate
     OECD --> Aggregate
     WorldBank --> Aggregate
-    Web --> Aggregate
 
     Aggregate --> ProsCons[Extract Pros/Cons<br/>GPT-4o]
 
@@ -107,7 +103,7 @@ graph TD
     style Strategy fill:#fff4e1
 
     classDef apiNode fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
-    class PubMed,SemanticScholar,CrossRef,ArXiv,OECD,WorldBank,Web apiNode
+    class PubMed,SemanticScholar,CrossRef,ArXiv,OECD,WorldBank apiNode
 ```
 
 ## Cost Optimization Strategy
@@ -130,14 +126,14 @@ The system uses two OpenAI models strategically:
 The classifier ensures we only call relevant APIs:
 
 - **Example 1**: "Le café augmente les risques de cancer"
-  - ✅ Calls: PubMed, Semantic Scholar, CrossRef, Web
+  - ✅ Calls: PubMed, Semantic Scholar, CrossRef
   - ❌ Skips: ArXiv, OECD, World Bank
-  - **Saves**: ~40% of API calls
+  - **Saves**: ~50% of API calls
 
 - **Example 2**: "Le PIB français augmente"
-  - ✅ Calls: OECD, World Bank, Semantic Scholar, CrossRef, Web
+  - ✅ Calls: OECD, World Bank, Semantic Scholar, CrossRef
   - ❌ Skips: PubMed, ArXiv
-  - **Saves**: ~30% of API calls
+  - **Saves**: ~33% of API calls
 
 ## Topic Categories
 
@@ -212,7 +208,6 @@ The workflow now:
 | ArXiv | No strict limit | None | Implemented in library |
 | OECD | No strict limit | None | Uses data explorer URLs |
 | World Bank | No strict limit | None | Public API |
-| DuckDuckGo | No official limit | None | Don't abuse |
 
 ## Future Enhancements
 
@@ -256,10 +251,10 @@ NCBI_API_KEY=your_ncbi_api_key_here
 
 Expected improvements with the new system:
 
-- **API calls reduced**: 30-50% fewer requests
+- **API calls reduced**: 30-50% fewer requests (only relevant academic sources)
 - **Cost reduction**: ~40% lower OpenAI costs (using mini for classification/queries)
-- **Response time**: Similar or faster (parallel execution)
-- **Result quality**: Better (domain-specific sources)
+- **Response time**: Similar or faster (parallel execution, no slow web scraping)
+- **Result quality**: Much better (academic sources only, no low-quality web results)
 - **Energy efficiency**: Fewer unnecessary API calls
 
 ## License & Legal
@@ -270,6 +265,6 @@ All research agents use **free, legal, and publicly accessible APIs**:
 - CrossRef: Open API
 - ArXiv: Open access
 - OECD/World Bank: Public data
-- DuckDuckGo: Terms of service compliant
 
-No API keys are required (except optional NCBI key for higher rate limits).
+All sources are academic or official - no web scraping required.
+No API keys are required (except optional NCBI key for higher PubMed rate limits).

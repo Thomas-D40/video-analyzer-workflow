@@ -81,8 +81,7 @@ def generate_markdown_report(data: Dict) -> str:
             "sources_identified": "📚 Sources Identifiées",
             "scientific_sources": "Sources Scientifiques",
             "medical_sources": "Sources Médicales",
-            "statistical_data": "Données Statistiques",
-            "web_sources": "Sources Web"
+            "statistical_data": "Données Statistiques"
         }
     else:  # English
         strings = {
@@ -104,8 +103,7 @@ def generate_markdown_report(data: Dict) -> str:
             "sources_identified": "📚 Identified Sources",
             "scientific_sources": "Scientific Sources",
             "medical_sources": "Medical Sources",
-            "statistical_data": "Statistical Data",
-            "web_sources": "Web Sources"
+            "statistical_data": "Statistical Data"
         }
     
     # En-tête du rapport
@@ -191,14 +189,13 @@ def generate_markdown_report(data: Dict) -> str:
                         report.append(f"- {claim}")
                 report.append("")
         
-        # Sources
+        # Sources (academic and official sources only)
         sources = arg.get("sources", {})
         scientific = sources.get("scientific", [])
         medical = sources.get("medical", [])
         statistical = sources.get("statistical", [])
-        web = sources.get("web", [])
 
-        if scientific or medical or statistical or web:
+        if scientific or medical or statistical:
             report.append(f"### {strings['sources_identified']}")
 
             if medical:
@@ -230,14 +227,6 @@ def generate_markdown_report(data: Dict) -> str:
             if statistical:
                 report.append(f"**{strings['statistical_data']}**")
                 for source in statistical:
-                    title = source.get("title", "Sans titre" if language == "fr" else "Untitled")
-                    url = source.get("url", "#")
-                    report.append(f"- [{title}]({url})")
-                report.append("")
-
-            if web:
-                report.append(f"**{strings['web_sources']}**")
-                for source in web:
                     title = source.get("title", "Sans titre" if language == "fr" else "Untitled")
                     url = source.get("url", "#")
                     report.append(f"- [{title}]({url})")
