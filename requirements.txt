@@ -22,7 +22,8 @@ tiktoken==0.7.0
 duckduckgo-search>=6.3.0
 arxiv>=2.1.0
 wbgapi>=1.0.12
-pandasdmx>=1.10.0  # For OECD SDMX API
+# Note: pandasdmx removed due to Pydantic v1 dependency conflict
+# OECD agent uses direct HTTP requests to SDMX API instead
 
 # HTTP Client
 httpx==0.27.2

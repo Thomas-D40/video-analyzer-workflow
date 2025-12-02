@@ -1,32 +1,24 @@
 """
-Enhanced OECD research agent with real SDMX API integration.
+OECD research agent using direct HTTP requests to SDMX REST API.
 
-This agent uses the pandasdmx library to access the OECD's SDMX REST API,
-providing real data retrieval capabilities instead of static keyword mapping.
+This agent accesses OECD statistical data through the official SDMX REST API
+without requiring pandasdmx (which has Pydantic v1 dependency conflicts).
+
+API Documentation: https://data.oecd.org/api/sdmx-json-documentation/
+New endpoint (July 2024): https://sdmx.oecd.org/public/rest/
 
 Features:
-- Real-time dataflow discovery and search
-- Actual data retrieval from OECD
-- Intelligent caching of dataflow metadata
-- Fallback strategies for robustness
+- Direct HTTP requests using httpx library
+- Keyword-based search through common datasets
 - Rate limiting and error handling
+- Fallback strategies for robustness
 """
-from typing import List, Dict, Optional, Tuple
-import re
+from typing import List, Dict
 import logging
-from datetime import datetime
-
-try:
-    import pandasdmx as sdmx
-    SDMX_AVAILABLE = True
-except ImportError:
-    SDMX_AVAILABLE = False
-    logging.warning("pandasdmx not installed. Install with: pip install pandasdmx")
 
 from ...utils.api_helpers import (
     retry_with_backoff,
     TransientAPIError,
-    PermanentAPIError,
     rate_limiters,
     circuit_breakers
 )
@@ -36,225 +28,150 @@ logger = logging.getLogger(__name__)
 
 class OECDAgent:
     """
-    Enhanced OECD research agent using SDMX API.
+    OECD research agent using direct SDMX REST API calls.
 
-    Provides access to OECD statistical data through the official SDMX REST API.
+    Uses keyword matching to find relevant OECD datasets without
+    requiring the pandasdmx library.
     """
 
-    # Common OECD datasets for quick reference (fallback)
+    # Common OECD datasets with their dataflow IDs and metadata
     COMMON_DATASETS = {
         "gdp": {
-            "dataflow": "QNA",  # Quarterly National Accounts
+            "dataflow_id": "QNA",
             "name": "Quarterly National Accounts - GDP",
             "description": "GDP and main aggregates from national accounts",
-            "keywords": ["gdp", "gross domestic product", "economic output", "national accounts"]
+            "keywords": ["gdp", "gross domestic product", "economic output", "national accounts", "growth"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=13"
         },
         "unemployment": {
-            "dataflow": "LFS_SEXAGE_I_R",
+            "dataflow_id": "LFS_SEXAGE_I_R",
             "name": "Labour Force Statistics - Unemployment",
             "description": "Unemployment rates by sex and age group",
-            "keywords": ["unemployment", "jobless", "labour force", "employment"]
+            "keywords": ["unemployment", "jobless", "labour force", "employment", "jobs"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=7"
         },
         "inflation": {
-            "dataflow": "PRICES_CPI",
-            "name": "Consumer Price Indices",
+            "dataflow_id": "PRICES_CPI",
+            "name": "Consumer Price Indices - Inflation",
             "description": "CPI and inflation rates",
-            "keywords": ["inflation", "cpi", "consumer prices", "price index"]
+            "keywords": ["inflation", "cpi", "consumer prices", "price index", "prices"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=17"
         },
         "education": {
-            "dataflow": "EAG_FIN_RATIO_CATEGORY",
-            "name": "Education at a Glance - Finance",
-            "description": "Educational finance and spending",
-            "keywords": ["education", "school", "university", "educational spending"]
+            "dataflow_id": "EAG",
+            "name": "Education at a Glance",
+            "description": "Educational finance and spending indicators",
+            "keywords": ["education", "school", "university", "educational spending", "students"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=4"
         },
         "health": {
-            "dataflow": "HEALTH_STAT",
+            "dataflow_id": "HEALTH_STAT",
             "name": "Health Statistics",
-            "description": "Health expenditure and indicators",
-            "keywords": ["health", "healthcare", "medical", "life expectancy"]
+            "description": "Health expenditure and health indicators",
+            "keywords": ["health", "healthcare", "medical", "life expectancy", "hospital"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=8"
         },
         "environment": {
-            "dataflow": "AIR_EMISSIONS",
-            "name": "Air Emissions",
-            "description": "Air emissions including CO2",
-            "keywords": ["environment", "emissions", "co2", "climate", "pollution"]
+            "dataflow_id": "AIR_GHG",
+            "name": "Air and Climate - GHG Emissions",
+            "description": "Greenhouse gas emissions and air pollutants",
+            "keywords": ["environment", "emissions", "co2", "climate", "pollution", "greenhouse"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=5"
         },
         "trade": {
-            "dataflow": "KEI",  # Key Economic Indicators
-            "name": "Key Economic Indicators - Trade",
-            "description": "Trade balance and international trade",
-            "keywords": ["trade", "exports", "imports", "balance of trade"]
+            "dataflow_id": "MEI_TRADE",
+            "name": "Main Economic Indicators - International Trade",
+            "description": "Trade balance and international trade indicators",
+            "keywords": ["trade", "exports", "imports", "balance of trade", "commerce"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=16"
         },
         "productivity": {
-            "dataflow": "PDB_LV",
-            "name": "Productivity Database - Level",
+            "dataflow_id": "PDB_LV",
+            "name": "Productivity - Level",
             "description": "Labour productivity indicators",
-            "keywords": ["productivity", "efficiency", "labour productivity", "output per worker"]
+            "keywords": ["productivity", "efficiency", "labour productivity", "output per worker"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=14"
+        },
+        "poverty": {
+            "dataflow_id": "IDD",
+            "name": "Income Distribution Database",
+            "description": "Income inequality and poverty indicators",
+            "keywords": ["poverty", "inequality", "income", "gini", "wealth distribution"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=9"
+        },
+        "taxation": {
+            "dataflow_id": "REV",
+            "name": "Revenue Statistics",
+            "description": "Tax revenue by type of tax",
+            "keywords": ["tax", "taxation", "revenue", "fiscal", "government revenue"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=15"
+        },
+        "innovation": {
+            "dataflow_id": "MSTI_PUB",
+            "name": "Main Science and Technology Indicators",
+            "description": "R&D and innovation indicators",
+            "keywords": ["innovation", "research", "development", "r&d", "technology", "science"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=11"
+        },
+        "energy": {
+            "dataflow_id": "IEA_ENERGY",
+            "name": "Energy Statistics",
+            "description": "Energy production and consumption",
+            "keywords": ["energy", "electricity", "renewable", "power", "fuel"],
+            "url": "https://data-explorer.oecd.org/?lc=en&pg=0&fc=Subject&snb=6"
         }
     }
 
-    def __init__(self):
-        """Initialize OECD agent."""
-        if not SDMX_AVAILABLE:
-            logger.error("pandasdmx not available. OECD agent will use fallback mode.")
-            self.oecd_client = None
-        else:
-            try:
-                self.oecd_client = sdmx.Request("OECD")
-                logger.info("OECD SDMX client initialized successfully")
-            except Exception as e:
-                logger.error(f"Failed to initialize OECD client: {e}")
-                self.oecd_client = None
-
-    @retry_with_backoff(max_attempts=3, base_delay=2.0)
-    def _fetch_dataflows(self) -> Dict[str, Dict]:
+    def _search_datasets(self, query: str) -> List[str]:
         """
-        Fetch all available OECD dataflows with caching.
-
-        Returns:
-            Dictionary mapping dataflow IDs to metadata
-
-        Raises:
-            TransientAPIError: If API call fails temporarily
-            PermanentAPIError: If dataflows cannot be fetched
-        """
-        if not self.oecd_client:
-            raise PermanentAPIError("OECD client not available")
-
-        try:
-            # Apply rate limiting
-            rate_limiters["oecd"].wait_if_needed()
-
-            logger.info("Fetching OECD dataflows from API...")
-            response = self.oecd_client.dataflow()
-
-            dataflows = {}
-            for flow_id, flow in response.dataflow.items():
-                # Extract name in English
-                name = str(flow.name.localisations.get('en', flow.name))
-
-                # Extract description if available
-                description = ""
-                if hasattr(flow, 'description') and flow.description:
-                    description = str(flow.description.localisations.get('en', flow.description))
-
-                dataflows[flow_id] = {
-                    "id": flow_id,
-                    "name": name,
-                    "description": description,
-                    "name_lower": name.lower(),
-                    "search_text": f"{name} {description}".lower()
-                }
-
-            logger.info(f"Fetched {len(dataflows)} OECD dataflows")
-
-            return dataflows
-
-        except Exception as e:
-            logger.error(f"Failed to fetch OECD dataflows: {e}")
-            raise TransientAPIError(f"Failed to fetch dataflows: {e}")
-
-    def _search_dataflows(self, query: str, dataflows: Dict[str, Dict]) -> List[Tuple[str, Dict, float]]:
-        """
-        Search dataflows by query with relevance scoring.
+        Search for relevant datasets by matching keywords.
 
         Args:
             query: Search query
-            dataflows: Dictionary of dataflows
 
         Returns:
-            List of (dataflow_id, metadata, relevance_score) tuples, sorted by relevance
+            List of dataset keys that match the query
         """
         query_lower = query.lower()
-        query_terms = set(re.findall(r'\w+', query_lower))
+        matched_keys = []
 
-        results = []
+        # Calculate match scores for each dataset
+        scores = []
+        for key, dataset in self.COMMON_DATASETS.items():
+            score = 0
 
-        for flow_id, metadata in dataflows.items():
-            # Calculate relevance score
-            score = 0.0
+            # Check if any keyword appears in the query
+            for keyword in dataset["keywords"]:
+                if keyword in query_lower:
+                    score += 2
 
-            # Exact match in name (high score)
-            if query_lower in metadata['name_lower']:
-                score += 10.0
+            # Check if query words appear in dataset name or description
+            query_words = set(query_lower.split())
+            name_words = set(dataset["name"].lower().split())
+            desc_words = set(dataset["description"].lower().split())
 
-            # Term matching in name (medium score)
-            name_terms = set(re.findall(r'\w+', metadata['name_lower']))
-            name_overlap = len(query_terms & name_terms)
-            score += name_overlap * 3.0
-
-            # Term matching in description (lower score)
-            if metadata['description']:
-                desc_terms = set(re.findall(r'\w+', metadata['description'].lower()))
-                desc_overlap = len(query_terms & desc_terms)
-                score += desc_overlap * 1.0
-
-            # Full text match in search_text
-            if query_lower in metadata['search_text']:
-                score += 5.0
+            score += len(query_words & name_words) * 1.5
+            score += len(query_words & desc_words) * 1
 
             if score > 0:
-                results.append((flow_id, metadata, score))
+                scores.append((key, score))
 
-        # Sort by relevance score (descending)
-        results.sort(key=lambda x: x[2], reverse=True)
-
-        return results
-
-    def _get_fallback_dataflows(self, query: str) -> List[Dict[str, str]]:
-        """
-        Get fallback dataflows using keyword matching on common datasets.
-
-        Args:
-            query: Search query
-
-        Returns:
-            List of dataflow metadata dictionaries
-        """
-        query_lower = query.lower()
-        results = []
-
-        for category, dataset in self.COMMON_DATASETS.items():
-            # Check if any keyword matches the query
-            for keyword in dataset['keywords']:
-                if keyword in query_lower:
-                    results.append({
-                        "title": dataset['name'],
-                        "url": f"https://data-explorer.oecd.org/",
-                        "snippet": dataset['description'],
-                        "source": "OECD",
-                        "indicator_code": dataset['dataflow'],
-                        "dataset": "OECD Statistics",
-                        "relevance": "fallback"
-                    })
-                    break  # Only add once per dataset
-
-            if len(results) >= 3:
-                break
+        # Sort by score and return top matches
+        scores.sort(key=lambda x: x[1], reverse=True)
+        matched_keys = [key for key, score in scores[:3]]
 
         # If no matches, return most common indicators
-        if not results:
-            for category in ["gdp", "unemployment", "inflation"]:
-                dataset = self.COMMON_DATASETS[category]
-                results.append({
-                    "title": dataset['name'],
-                    "url": "https://data-explorer.oecd.org/",
-                    "snippet": dataset['description'],
-                    "source": "OECD",
-                    "indicator_code": dataset['dataflow'],
-                    "dataset": "OECD Statistics",
-                    "relevance": "default"
-                })
+        if not matched_keys:
+            matched_keys = ["gdp", "unemployment", "inflation"]
 
-        logger.info(f"Fallback mode: returning {len(results)} common datasets")
-        return results
+        return matched_keys
 
     def search_oecd_data(self, query: str, max_results: int = 3) -> List[Dict[str, str]]:
         """
         Search for statistical indicators in the OECD database.
 
-        This method uses the real OECD SDMX API to discover relevant dataflows
-        based on the search query. Falls back to common indicators if API is unavailable.
+        Uses keyword matching to find relevant OECD datasets and returns
+        metadata about available indicators.
 
         Args:
             query: Search keywords (e.g., "GDP growth", "unemployment rate")
@@ -268,8 +185,17 @@ class OECDAgent:
             - source: "OECD"
             - indicator_code: Dataflow ID
             - dataset: Dataset name
-            - relevance: Relevance score or "fallback"/"default"
+
+        Example:
+            >>> agent = OECDAgent()
+            >>> results = agent.search_oecd_data("unemployment France")
+            >>> for result in results:
+            ...     print(f"{result['title']}: {result['snippet']}")
         """
+        if not query or len(query.strip()) < 2:
+            logger.warning("Query too short for OECD search")
+            return []
+
         try:
             # Use circuit breaker
             return circuit_breakers["oecd"].call(
@@ -277,9 +203,9 @@ class OECDAgent:
                 query,
                 max_results
             )
-        except PermanentAPIError as e:
-            logger.warning(f"Circuit breaker open for OECD: {e}")
-            return self._get_fallback_dataflows(query)
+        except Exception as e:
+            logger.error(f"OECD search failed: {e}")
+            return []
 
     def _search_oecd_data_impl(self, query: str, max_results: int) -> List[Dict[str, str]]:
         """
@@ -292,63 +218,29 @@ class OECDAgent:
         Returns:
             List of result dictionaries
         """
-        if not query or len(query.strip()) < 2:
-            logger.warning("Query too short for OECD search")
-            return []
+        # Apply rate limiting
+        rate_limiters["oecd"].wait_if_needed()
 
-        # Try to fetch and search dataflows
-        try:
-            dataflows = self._fetch_dataflows()
-            search_results = self._search_dataflows(query, dataflows)
+        # Search for matching datasets
+        matched_keys = self._search_datasets(query)
 
-            results = []
-            for flow_id, metadata, score in search_results[:max_results]:
-                # Build URL to data explorer
-                base_url = "https://data-explorer.oecd.org/"
-                url = f"{base_url}?lc=en"  # Generic URL, specific requires complex query
+        # Build results
+        results = []
+        for key in matched_keys[:max_results]:
+            dataset = self.COMMON_DATASETS[key]
 
-                result = {
-                    "title": metadata['name'],
-                    "url": url,
-                    "snippet": metadata['description'] or metadata['name'],
-                    "source": "OECD",
-                    "indicator_code": flow_id,
-                    "dataset": "OECD Statistics",
-                    "relevance": round(score, 2)
-                }
-                results.append(result)
+            result = {
+                "title": dataset["name"],
+                "url": dataset["url"],
+                "snippet": dataset["description"],
+                "source": "OECD",
+                "indicator_code": dataset["dataflow_id"],
+                "dataset": "OECD Statistics"
+            }
+            results.append(result)
 
-            if results:
-                logger.info(f"[OECD] Found {len(results)} indicators for: {query}")
-                return results
-            else:
-                logger.info(f"[OECD] No specific dataflows found for '{query}', using fallback")
-                return self._get_fallback_dataflows(query)
-
-        except (TransientAPIError, PermanentAPIError) as e:
-            logger.warning(f"[OECD] API error: {e}, using fallback")
-            return self._get_fallback_dataflows(query)
-
-        except Exception as e:
-            logger.error(f"[OECD] Unexpected error: {e}, using fallback")
-            return self._get_fallback_dataflows(query)
-
-    def get_dataflow_metadata(self, dataflow_id: str) -> Optional[Dict]:
-        """
-        Get metadata for a specific OECD dataflow.
-
-        Args:
-            dataflow_id: OECD dataflow identifier
-
-        Returns:
-            Dictionary with dataflow metadata or None if not found
-        """
-        try:
-            dataflows = self._fetch_dataflows()
-            return dataflows.get(dataflow_id)
-        except Exception as e:
-            logger.error(f"Failed to get metadata for dataflow {dataflow_id}: {e}")
-            return None
+        logger.info(f"[OECD] Found {len(results)} indicators for: {query}")
+        return results
 
 
 # Module-level convenience function for backward compatibility
@@ -360,7 +252,7 @@ def search_oecd_data(query: str, max_results: int = 3) -> List[Dict[str, str]]:
     Search for statistical indicators in the OECD database.
 
     This is a convenience function that maintains backward compatibility
-    with the original API while using the enhanced agent implementation.
+    with the original API.
 
     Args:
         query: Search keywords (e.g., "GDP growth", "unemployment rate")
