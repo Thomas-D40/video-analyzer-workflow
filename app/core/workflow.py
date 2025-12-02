@@ -16,13 +16,15 @@ from app.utils.youtube import extract_video_id
 from app.utils.transcript import extract_transcript
 from app.agents.extraction import extract_arguments
 from app.agents.research import (
-    generate_search_queries,
     search_arxiv,
     search_world_bank_data,
     search_pubmed,
     search_semantic_scholar,
     search_crossref,
     search_oecd_data,
+)
+from app.agents.orchestration import (
+    generate_search_queries,
     get_research_strategy,
 )
 from app.agents.analysis import extract_pros_cons, aggregate_results

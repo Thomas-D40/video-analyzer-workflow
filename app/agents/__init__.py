@@ -10,10 +10,18 @@ Ce package contient tous les agents organises en trois categories:
 # Import everything from subpackages for backward compatibility
 from .extraction import extract_arguments
 from .research import (
-    generate_search_queries,
-    search_literature,
     search_arxiv,
     search_world_bank_data,
+    search_pubmed,
+    search_semantic_scholar,
+    search_crossref,
+    search_oecd_data,
+)
+from .orchestration import (
+    generate_search_queries,
+    classify_argument_topic,
+    get_agents_for_argument,
+    get_research_strategy,
 )
 from .analysis import extract_pros_cons, aggregate_results
 
@@ -21,10 +29,17 @@ __all__ = [
     # Extraction
     "extract_arguments",
     # Research
-    "generate_search_queries",
-    "search_literature",
     "search_arxiv",
     "search_world_bank_data",
+    "search_pubmed",
+    "search_semantic_scholar",
+    "search_crossref",
+    "search_oecd_data",
+    # Orchestration
+    "generate_search_queries",
+    "classify_argument_topic",
+    "get_agents_for_argument",
+    "get_research_strategy",
     # Analysis
     "extract_pros_cons",
     "aggregate_results",

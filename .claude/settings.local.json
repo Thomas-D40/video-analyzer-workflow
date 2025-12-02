@@ -17,7 +17,11 @@
       "Bash(claude mcp list:*)",
       "Bash(docker compose:*)",
       "Bash(docker-compose ps:*)",
-      "Bash(pip3 install:*)"
+      "Bash(pip3 install:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(pip install:*)",
+      "Bash(/usr/bin/python3 -m pip install:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []
