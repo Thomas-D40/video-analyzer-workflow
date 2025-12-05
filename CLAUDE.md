@@ -62,11 +62,16 @@ The agents are organized into three subpackages by role:
 - `arguments.py`: Extract substantive arguments with stance detection
 
 **`app/agents/research/`** - Find external sources
-- `query_generator.py`: Generate optimized search queries for different engines
-- `web.py`: Web search via DuckDuckGo
 - `scientific.py`: Scientific papers from ArXiv
+- `pubmed.py`: Medical literature from PubMed/NCBI
+- `europepmc.py`: Biomedical research from Europe PMC
+- `semantic_scholar.py`: AI-powered academic search (200M+ papers)
+- `crossref.py`: Academic publication metadata via DOI
+- `core.py`: Open access papers (350M+ sources)
+- `doaj.py`: Peer-reviewed open access journals
 - `statistical.py`: Statistical data from World Bank
-- *[Extensible: Add news APIs, Google Scholar, PubMed, etc.]*
+- `oecd.py`: Economic indicators from OECD
+- *[Extensible: Add more domain-specific sources as needed]*
 
 **`app/agents/analysis/`** - Analyze and aggregate results
 - `pros_cons.py`: Extract supporting/contradicting evidence from sources
@@ -106,15 +111,17 @@ The `process_video()` function orchestrates a multi-stage pipeline:
    - Returns arguments with stance (affirmatif/conditionnel)
    - Truncates transcripts to 25,000 chars to save tokens
 
-5. **Search Query Generation** (`app/agents/research/query_generator.py`)
-   - Generates optimized queries for different search engines
-   - Returns: `{arxiv, world_bank, web_query}`
+5. **Topic Classification & Agent Selection** (`app/agents/orchestration/`)
+   - Classifies argument domain (medical, scientific, economic, etc.)
+   - Selects appropriate research agents based on topic
+   - Generates optimized queries for each selected agent
 
-6. **Multi-Source Research** (parallel execution)
-   - **Web Search** (`app/agents/research/web.py`): DuckDuckGo with relevance filtering
-   - **Scientific Papers** (`app/agents/research/scientific.py`): ArXiv API
-   - **Statistical Data** (`app/agents/research/statistical.py`): World Bank API
-   - Relevance filtering (`app/utils/relevance_filter.py`) keeps top 5 results per argument
+6. **Multi-Source Research** (parallel execution via `app/core/parallel_research.py`)
+   - **Medical**: PubMed, Europe PMC
+   - **Scientific**: ArXiv, Semantic Scholar, CrossRef, CORE, DOAJ
+   - **Statistical**: World Bank, OECD
+   - All agents return standardized results with access type metadata
+   - Relevance filtering keeps top sources per argument
 
 7. **Pros/Cons Analysis** (`app/agents/analysis/pros_cons.py`)
    - OpenAI GPT-4o-mini analyzes sources

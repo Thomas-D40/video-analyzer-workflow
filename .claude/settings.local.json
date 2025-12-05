@@ -21,7 +21,10 @@
       "Bash(python -m pip install:*)",
       "Bash(pip install:*)",
       "Bash(/usr/bin/python3 -m pip install:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(python -c:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

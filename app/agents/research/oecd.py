@@ -235,7 +235,10 @@ class OECDAgent:
                 "snippet": dataset["description"],
                 "source": "OECD",
                 "indicator_code": dataset["dataflow_id"],
-                "dataset": "OECD Statistics"
+                "dataset": "OECD Statistics",
+                "access_type": "full_data",
+                "has_full_text": True,
+                "access_note": "Complete statistical data freely available"
             }
             results.append(result)
 

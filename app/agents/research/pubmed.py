@@ -125,6 +125,20 @@ def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
                             name = f"{forename.text} {name}"
                         authors.append(name)
 
+                # Check for PMC ID (indicates potential full text access)
+                pmc_id = article_elem.find(".//ArticleId[@IdType='pmc']")
+                has_pmc = pmc_id is not None
+
+                # Determine access type
+                if has_pmc:
+                    access_type = "open_access"
+                    has_full_text = True
+                    access_note = f"Full text available via PMC{pmc_id.text}"
+                else:
+                    access_type = "abstract_only"
+                    has_full_text = False
+                    access_note = "Abstract only - full text may require subscription"
+
                 article = {
                     "title": title,
                     "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid_text}/",
@@ -133,7 +147,10 @@ def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
                     "pmid": pmid_text,
                     "journal": journal,
                     "year": year,
-                    "authors": ", ".join(authors) if authors else "N/A"
+                    "authors": ", ".join(authors) if authors else "N/A",
+                    "access_type": access_type,
+                    "has_full_text": has_full_text,
+                    "access_note": access_note
                 }
 
                 articles.append(article)

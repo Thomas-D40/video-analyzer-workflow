@@ -105,6 +105,22 @@ def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
             # Extract citation count
             citations = item.get("is-referenced-by-count", 0)
 
+            # Check for license information (indicator of potential open access)
+            licenses = item.get("license", [])
+            is_open_license = any("creativecommons" in lic.get("URL", "").lower() or
+                                  "cc-by" in lic.get("URL", "").lower()
+                                  for lic in licenses)
+
+            # Determine access type
+            if is_open_license:
+                access_type = "open_access"
+                has_full_text = True
+                access_note = "Open access via Creative Commons license"
+            else:
+                access_type = "metadata_only"
+                has_full_text = False
+                access_note = "Metadata and abstract only - full text may require subscription"
+
             article = {
                 "title": title,
                 "url": url,
@@ -115,7 +131,10 @@ def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
                 "year": str(year),
                 "citations": citations,
                 "publisher": item.get("publisher", "N/A"),
-                "authors": ", ".join(authors) if authors else "N/A"
+                "authors": ", ".join(authors) if authors else "N/A",
+                "access_type": access_type,
+                "has_full_text": has_full_text,
+                "access_note": access_note
             }
 
             articles.append(article)

@@ -76,6 +76,17 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, 
             if not abstract:
                 abstract = f"Article from {paper.get('year', 'N/A')} with {paper.get('citationCount', 0)} citations"
 
+            # Determine access type
+            is_open_access = bool(paper.get("openAccessPdf"))
+            if is_open_access:
+                access_type = "open_access"
+                has_full_text = True
+                access_note = "Full text available (open access)"
+            else:
+                access_type = "abstract_only"
+                has_full_text = False
+                access_note = "Abstract only - full text may require subscription"
+
             article = {
                 "title": paper.get("title", "Untitled"),
                 "url": paper_url,
@@ -84,7 +95,9 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, 
                 "year": paper.get("year", "N/A"),
                 "citations": paper.get("citationCount", 0),
                 "authors": ", ".join(authors) if authors else "N/A",
-                "open_access": bool(paper.get("openAccessPdf"))
+                "access_type": access_type,
+                "has_full_text": has_full_text,
+                "access_note": access_note
             }
 
             articles.append(article)

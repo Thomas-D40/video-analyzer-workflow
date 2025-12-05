@@ -22,6 +22,9 @@ from app.agents.research import (
     search_semantic_scholar,
     search_crossref,
     search_oecd_data,
+    search_core,
+    search_doaj,
+    search_europepmc,
 )
 from app.agents.orchestration import (
     generate_search_queries,

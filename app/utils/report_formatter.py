@@ -10,6 +10,26 @@ from openai import OpenAI
 from ..config import get_settings
 
 
+def _get_access_icon(access_type: str) -> str:
+    """
+    Get the appropriate icon for the access type.
+
+    Args:
+        access_type: Type of access (open_access, abstract_only, full_data, metadata_only)
+
+    Returns:
+        Icon emoji representing the access type
+    """
+    access_icons = {
+        "open_access": "🔓",
+        "abstract_only": "📄",
+        "full_data": "📊",
+        "metadata_only": "📋",
+        "paywall": "🔒"
+    }
+    return access_icons.get(access_type, "❓")
+
+
 def _translate_to_french(text: str) -> str:
     """
     Translate English text to French using OpenAI.
@@ -81,7 +101,8 @@ def generate_markdown_report(data: Dict) -> str:
             "sources_identified": "📚 Sources Identifiées",
             "scientific_sources": "Sources Scientifiques",
             "medical_sources": "Sources Médicales",
-            "statistical_data": "Données Statistiques"
+            "statistical_data": "Données Statistiques",
+            "access_legend": "**Légende d'accès** : 🔓 Accès libre | 📄 Résumé uniquement | 📊 Données complètes | 📋 Métadonnées uniquement"
         }
     else:  # English
         strings = {
@@ -103,7 +124,8 @@ def generate_markdown_report(data: Dict) -> str:
             "sources_identified": "📚 Identified Sources",
             "scientific_sources": "Scientific Sources",
             "medical_sources": "Medical Sources",
-            "statistical_data": "Statistical Data"
+            "statistical_data": "Statistical Data",
+            "access_legend": "**Access Legend**: 🔓 Open Access | 📄 Abstract Only | 📊 Full Data | 📋 Metadata Only"
         }
     
     # En-tête du rapport
@@ -197,6 +219,8 @@ def generate_markdown_report(data: Dict) -> str:
 
         if scientific or medical or statistical:
             report.append(f"### {strings['sources_identified']}")
+            report.append(strings["access_legend"])
+            report.append("")
 
             if medical:
                 report.append(f"**{strings['medical_sources']}**")
@@ -204,11 +228,14 @@ def generate_markdown_report(data: Dict) -> str:
                     title = source.get("title", "Sans titre" if language == "fr" else "Untitled")
                     url = source.get("url", "#")
                     summary = (source.get("summary") or source.get("snippet") or "")[:150]
+                    access_type = source.get("access_type", "")
+                    access_icon = _get_access_icon(access_type) if access_type else ""
+
                     if summary:
-                        report.append(f"- **[{title}]({url})**")
+                        report.append(f"- {access_icon} **[{title}]({url})**")
                         report.append(f"  > *{summary}...*")
                     else:
-                        report.append(f"- [{title}]({url})")
+                        report.append(f"- {access_icon} [{title}]({url})")
                 report.append("")
 
             if scientific:
@@ -217,11 +244,14 @@ def generate_markdown_report(data: Dict) -> str:
                     title = source.get("title", "Sans titre" if language == "fr" else "Untitled")
                     url = source.get("url", "#")
                     summary = (source.get("summary") or source.get("snippet") or "")[:150]
+                    access_type = source.get("access_type", "")
+                    access_icon = _get_access_icon(access_type) if access_type else ""
+
                     if summary:
-                        report.append(f"- **[{title}]({url})**")
+                        report.append(f"- {access_icon} **[{title}]({url})**")
                         report.append(f"  > *{summary}...*")
                     else:
-                        report.append(f"- [{title}]({url})")
+                        report.append(f"- {access_icon} [{title}]({url})")
                 report.append("")
 
             if statistical:
@@ -229,7 +259,9 @@ def generate_markdown_report(data: Dict) -> str:
                 for source in statistical:
                     title = source.get("title", "Sans titre" if language == "fr" else "Untitled")
                     url = source.get("url", "#")
-                    report.append(f"- [{title}]({url})")
+                    access_type = source.get("access_type", "full_data")  # Statistical sources default to full_data
+                    access_icon = _get_access_icon(access_type)
+                    report.append(f"- {access_icon} [{title}]({url})")
                 report.append("")
         
         report.append("---")

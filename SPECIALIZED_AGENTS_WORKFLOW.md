@@ -163,13 +163,13 @@ categories = classify_argument_topic(argument)
 
 # Gets recommended agents for argument
 agents = get_agents_for_argument(argument)
-# Returns: ["pubmed", "semantic_scholar", "crossref", "web"]
+# Returns: ["pubmed", "europepmc", "semantic_scholar", "crossref"]
 
 # Gets complete research strategy
 strategy = get_research_strategy(argument)
 # Returns: {
 #   "categories": ["medicine"],
-#   "agents": ["pubmed", "semantic_scholar", "crossref", "web"],
+#   "agents": ["pubmed", "europepmc", "semantic_scholar", "crossref"],
 #   "priority": "pubmed"
 # }
 ```
@@ -180,12 +180,12 @@ strategy = get_research_strategy(argument)
 # Generate queries for specific agents only
 queries = generate_search_queries(
     argument="Le café augmente les risques de cancer",
-    agents=["pubmed", "semantic_scholar", "web"]
+    agents=["pubmed", "semantic_scholar", "europepmc"]
 )
 # Returns: {
 #   "pubmed": "coffee cancer risk epidemiology",
 #   "semantic_scholar": "coffee consumption cancer risk health effects",
-#   "web_query": "café cancer risques étude scientifique fact check"
+#   "europepmc": "coffee consumption cancer risk clinical studies"
 # }
 ```
 
@@ -196,7 +196,7 @@ The workflow now:
 2. Selects appropriate agents based on classification
 3. Generates optimized queries for selected agents only
 4. Executes searches in parallel
-5. Aggregates results by source type (medical, scientific, statistical, web)
+5. Aggregates results by source type (medical, scientific, statistical)
 
 ## API Rate Limits & Best Practices
 

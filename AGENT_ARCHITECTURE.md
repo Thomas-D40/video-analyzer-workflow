@@ -51,12 +51,31 @@ Pure data fetchers that retrieve information from external APIs. Each agent spec
   - Source: CrossRef API
   - Returns: Publication metadata, citations, publishers
 
+- `search_core(query, max_results)` ⭐ **NEW**
+  - Domain: All academic disciplines (open access focus)
+  - Source: CORE API
+  - Returns: 350M+ open access papers from repositories worldwide
+  - Access: Always open access with full text availability
+
+- `search_doaj(query, max_results)` ⭐ **NEW**
+  - Domain: Quality peer-reviewed open access journals
+  - Source: DOAJ API
+  - Returns: 2M+ articles from vetted open access journals
+  - Access: Always open access with full text availability
+
 #### **Medical & Health**
 - `search_pubmed(query, max_results)`
   - Domain: Medicine, Biology, Health
   - Source: PubMed/NCBI API
   - Returns: 39M+ biomedical citations with abstracts
   - Supports: MeSH terminology
+
+- `search_europepmc(query, max_results)` ⭐ **NEW**
+  - Domain: Biomedical and life sciences
+  - Source: Europe PMC API
+  - Returns: Life sciences literature with better full-text access than PubMed
+  - Access: Detects open access based on PMC ID and isOpenAccess flag
+  - Special: Includes preprints and European research content
 
 #### **Economic & Statistical**
 - `search_oecd_data(query, max_results)` ⭐ **ENHANCED**
@@ -180,7 +199,10 @@ Analyze collected sources and calculate reliability scores.
    │
    ├─ Execute Searches [research/*.py] (PARALLEL)
    │   ├─ PubMed (if medical)
+   │   ├─ Europe PMC (if medical) ⭐ NEW
    │   ├─ ArXiv (if scientific)
+   │   ├─ CORE (if scientific) ⭐ NEW
+   │   ├─ DOAJ (if scientific) ⭐ NEW
    │   ├─ OECD (if economic)
    │   ├─ World Bank (if economic)
    │   ├─ Semantic Scholar (always)
@@ -342,7 +364,6 @@ pip install openai>=1.51.0      # Query generation & analysis
 ### High Priority
 1. Add **News APIs** for current events (NewsAPI, GNews)
 2. Add **Fact-check APIs** (Google Fact Check, ClaimBuster)
-3. Add **CORE API** for 320M+ open access papers
 
 ### Medium Priority
 4. Add **Eurostat API** for European statistics

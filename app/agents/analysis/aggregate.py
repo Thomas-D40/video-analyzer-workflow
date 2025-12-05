@@ -103,6 +103,9 @@ Scoring criteria:
 
 Factors: number of sources, consensus, quality (scientific > general), tone, pros/cons balance.
 
+IMPORTANT: Abstract-only sources (without full text access) are still VALUABLE and RELIABLE for fact-checking.
+Do NOT penalize sources for being abstract-only or requiring subscription. Evaluate based on content quality, not access level.
+
 JSON format:
 {
   "arguments": [
@@ -177,12 +180,12 @@ Return only JSON, no additional text."""
         # If aggregation failed, return at least the raw data
         if not validated_arguments and items:
             for item in items:
-                # Count REAL sources (web, scientific, statistical) instead of pros/cons
+                # Count REAL sources (medical, scientific, statistical) instead of pros/cons
                 sources = item.get("sources", {})
-                num_web = len(sources.get("web", []))
+                num_medical = len(sources.get("medical", []))
                 num_scientific = len(sources.get("scientific", []))
                 num_statistical = len(sources.get("statistical", []))
-                num_sources = num_web + num_scientific + num_statistical
+                num_sources = num_medical + num_scientific + num_statistical
 
                 # If no sources, reliability = 0.0 to indicate absence of sources
                 if num_sources == 0:
@@ -221,12 +224,12 @@ def _fallback_aggregation(items: List[Dict]) -> Dict:
     arguments = []
 
     for item in items:
-        # Count REAL sources (web, scientific, statistical) instead of pros/cons
+        # Count REAL sources (medical, scientific, statistical) instead of pros/cons
         sources = item.get("sources", {})
-        num_web = len(sources.get("web", []))
+        num_medical = len(sources.get("medical", []))
         num_scientific = len(sources.get("scientific", []))
         num_statistical = len(sources.get("statistical", []))
-        num_sources = num_web + num_scientific + num_statistical
+        num_sources = num_medical + num_scientific + num_statistical
 
         # If no sources, reliability = 0.0 to indicate absence of sources
         if num_sources == 0:

@@ -39,23 +39,48 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
     if not argument_id:
         argument_id = hashlib.md5(argument.encode()).hexdigest()[:8]
 
-    # Format articles context
+    # Format articles context (use fulltext if available, otherwise snippet/abstract)
     articles_context = ""
     current_length = 0
-    max_length = 6000
-    
+    max_length = 40000  # Increased to accommodate full texts
+
+    fulltext_count = 0
+    abstract_count = 0
+
     for article in articles:
-        article_text = f"Article: {article.get('title', '')}\nURL: {article.get('url', '')}\nSummary: {article.get('snippet', '')}\n\n"
+        # Prefer fulltext over abstract/snippet
+        content = ""
+        content_type = "Summary"
+
+        if "fulltext" in article and article["fulltext"]:
+            content = article["fulltext"]
+            content_type = "Full Text"
+            fulltext_count += 1
+        else:
+            # Fallback to snippet/abstract
+            content = article.get('snippet') or article.get('abstract') or article.get('summary', '')
+            content_type = "Summary"
+            abstract_count += 1
+
+        article_text = f"Article: {article.get('title', '')}\nURL: {article.get('url', '')}\n{content_type}: {content}\n\n"
 
         if current_length + len(article_text) > max_length:
+            # Still include at least partial content
+            remaining_space = max_length - current_length
+            if remaining_space > 500:  # Only include if we have meaningful space left
+                article_text = f"Article: {article.get('title', '')}\nURL: {article.get('url', '')}\n{content_type}: {content[:remaining_space]}\n\n"
+                articles_context += article_text
             break
 
         articles_context += article_text
         current_length += len(article_text)
 
+    print(f"[DEBUG extract_pros_cons] Content stats: {fulltext_count} full texts, {abstract_count} abstracts, {current_length} total chars")
+
     if len(articles) > 0 and not articles_context:
-         # Fallback if the first article is too long (unlikely with snippet)
-         articles_context = f"Article: {articles[0].get('title', '')}\nURL: {articles[0].get('url', '')}\nSummary: {articles[0].get('snippet', '')[:max_length]}\n\n"
+         # Fallback if the first article is too long
+         first_content = articles[0].get('fulltext') or articles[0].get('snippet', '')
+         articles_context = f"Article: {articles[0].get('title', '')}\nURL: {articles[0].get('url', '')}\nContent: {first_content[:max_length]}\n\n"
 
     client = OpenAI(api_key=settings.openai_api_key)
 
@@ -68,6 +93,7 @@ Analyze scientific articles to identify points that support (pros) or contradict
 2.  **No Invention**: If no article mentions a point, DO NOT INVENT IT.
 3.  **Citation Required**: Each claim must be associated with the exact URL of the article containing it.
 4.  **Relevance**: Only retain points directly related to the analyzed argument.
+5.  **Access Level**: Abstracts and summaries are VALID sources - do not dismiss sources for lacking full text access.
 
 For each article, identify:
 - Claims that SUPPORT the argument (pros)

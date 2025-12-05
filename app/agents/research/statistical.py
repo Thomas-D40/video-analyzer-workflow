@@ -313,7 +313,10 @@ class WorldBankAgent:
                             "country_code": economy,
                             "value": float(row[code]),
                             "year": year,
-                            "source": "World Bank"
+                            "source": "World Bank",
+                            "access_type": "full_data",
+                            "has_full_text": True,
+                            "access_note": "Complete statistical data freely available"
                         })
 
             logger.debug(f"Retrieved {len(data_points)} data points")

@@ -46,7 +46,10 @@ def search_arxiv(argument: str, max_results: int = 5) -> List[Dict[str, str]]:
                 "authors": ", ".join([a.name for a in result.authors]),
                 "url": result.entry_id,
                 "published": result.published.strftime("%Y-%m-%d"),
-                "source": "arxiv"
+                "source": "arxiv",
+                "access_type": "open_access",
+                "has_full_text": True,
+                "access_note": "Full text available as PDF"
             })
             
     except Exception as e:

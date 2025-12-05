@@ -15,12 +15,21 @@ from app.agents.research import (
     search_semantic_scholar,
     search_crossref,
     search_oecd_data,
+    search_core,
+    search_doaj,
+    search_europepmc,
 )
 from app.agents.orchestration import (
     generate_search_queries,
     get_research_strategy,
 )
+from app.agents.enrichment import (
+    screen_sources_by_relevance,
+    fetch_fulltext_for_sources,
+    get_screening_stats,
+)
 from app.agents.analysis import extract_pros_cons
+from app.config import get_settings
 
 
 # Thread pool for blocking I/O operations
@@ -67,9 +76,12 @@ async def research_single_agent(
         # Map agent names to functions
         agent_funcs = {
             "pubmed": lambda: search_pubmed(query, max_results),
+            "europepmc": lambda: search_europepmc(query, max_results),
             "arxiv": lambda: search_arxiv(query, max_results),
             "semantic_scholar": lambda: search_semantic_scholar(query, max_results),
             "crossref": lambda: search_crossref(query, max_results=3),
+            "core": lambda: search_core(query, max_results),
+            "doaj": lambda: search_doaj(query, max_results),
             "oecd": lambda: search_oecd_data(query, max_results=3),
             "world_bank": lambda: search_world_bank_data(query),
         }
@@ -138,37 +150,102 @@ async def research_argument_parallel(
     # Wait for all searches to complete
     results = await asyncio.gather(*tasks, return_exceptions=False)
 
-    # Step 4: Organize results by type
+    # Step 4: Collect all results
     all_sources = []
+    for agent_name, agent_results, error in results:
+        if error:
+            continue
+        all_sources.extend(agent_results)
+
+    print(f"[INFO parallel] Argument: {argument_text[:50]}...")
+    print(f"[INFO parallel] Total sources: {len(all_sources)}")
+
+    # Step 4.5: Enrichment - Screen for relevance
+    settings = get_settings()
+    screening_enabled = getattr(settings, 'fulltext_screening_enabled', True)
+
+    if screening_enabled and all_sources:
+        try:
+            top_n = getattr(settings, 'fulltext_top_n', 3)
+            min_score = getattr(settings, 'fulltext_min_score', 0.6)
+
+            print(f"[INFO parallel] Screening {len(all_sources)} sources (top_n={top_n}, min_score={min_score})...")
+
+            selected_sources, rejected_sources = await _run_in_executor(
+                screen_sources_by_relevance,
+                argument_en,
+                all_sources,
+                "en",
+                top_n,
+                min_score
+            )
+
+            # Log screening stats
+            stats = get_screening_stats(all_sources)
+            print(f"[INFO parallel] Screening stats: avg_score={stats['avg_score']:.2f}, "
+                  f"high={stats['high_relevance']}, medium={stats['medium_relevance']}, low={stats['low_relevance']}")
+
+        except Exception as e:
+            print(f"[ERROR parallel] Screening error: {e}")
+            # Fallback: use simple top-N selection
+            selected_sources = all_sources[:3]
+            rejected_sources = all_sources[3:]
+    else:
+        print("[INFO parallel] Screening disabled, using all sources")
+        selected_sources = all_sources
+        rejected_sources = []
+
+    # Step 4.6: Enrichment - Fetch full text for top sources
+    web_fetch_enabled = getattr(settings, 'mcp_web_fetch_enabled', False)
+
+    if web_fetch_enabled and selected_sources:
+        try:
+            print(f"[INFO parallel] Fetching full text for {len(selected_sources)} selected sources...")
+
+            enhanced_sources = await _run_in_executor(
+                fetch_fulltext_for_sources,
+                selected_sources
+            )
+
+            # Count successful full-text retrievals
+            fulltext_count = sum(1 for s in enhanced_sources if "fulltext" in s)
+            print(f"[INFO parallel] Successfully retrieved {fulltext_count}/{len(selected_sources)} full texts")
+
+            # Combine: enhanced sources + rejected sources
+            final_sources = enhanced_sources + rejected_sources
+
+        except Exception as e:
+            print(f"[ERROR parallel] Full-text fetch error: {e}")
+            # Fallback: use all sources without full text
+            final_sources = all_sources
+    else:
+        if not web_fetch_enabled:
+            print("[INFO parallel] Web fetch disabled, using abstracts only")
+        final_sources = all_sources
+
+    # Reorganize final sources by type (for report)
     sources_by_type = {
         "scientific": [],
         "medical": [],
         "statistical": []
     }
 
-    for agent_name, agent_results, error in results:
-        if error:
-            continue
+    for source in final_sources:
+        source_name = source.get("source", "").lower()
+        if any(x in source_name for x in ["pubmed", "europe"]):
+            sources_by_type["medical"].append(source)
+        elif any(x in source_name for x in ["arxiv", "semantic", "crossref", "core", "doaj"]):
+            sources_by_type["scientific"].append(source)
+        elif any(x in source_name for x in ["oecd", "world bank"]):
+            sources_by_type["statistical"].append(source)
 
-        all_sources.extend(agent_results)
-
-        # Categorize by source type
-        if agent_name in ["pubmed"]:
-            sources_by_type["medical"].extend(agent_results)
-        elif agent_name in ["arxiv", "semantic_scholar", "crossref"]:
-            sources_by_type["scientific"].extend(agent_results)
-        elif agent_name in ["oecd", "world_bank"]:
-            sources_by_type["statistical"].extend(agent_results)
-
-    print(f"[INFO parallel] Argument: {argument_text[:50]}...")
-    print(f"[INFO parallel] Total sources: {len(all_sources)}")
-
-    # Step 5: Pros/Cons Analysis
+    # Step 5: Pros/Cons Analysis (with mixed full-text + abstracts)
     try:
+        print(f"[INFO parallel] Analyzing {len(final_sources)} sources (with enrichment)...")
         analysis = await _run_in_executor(
             extract_pros_cons,
             argument_en,
-            all_sources
+            final_sources  # Mix of full-text + abstracts
         )
         print(f"[INFO parallel] Analysis: {len(analysis.get('pros', []))} pros, {len(analysis.get('cons', []))} cons")
     except Exception as e:
