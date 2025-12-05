@@ -102,6 +102,98 @@ export function hideControls() {
 }
 
 /**
+ * Affiche les analyses disponibles
+ * @param {Object} data - Données des analyses disponibles
+ * @param {Function} onViewAnalysis - Callback pour voir une analyse
+ */
+export function renderAvailableAnalyses(data, onViewAnalysis) {
+    if (!controlsDiv) return;
+
+    // Si aucune analyse, ne rien afficher
+    if (!data.analyses || data.analyses.length === 0) {
+        return;
+    }
+
+    // Créer le conteneur pour les analyses disponibles
+    const existingContainer = document.getElementById('availableAnalyses');
+    if (existingContainer) {
+        existingContainer.remove();
+    }
+
+    const container = document.createElement('div');
+    container.id = 'availableAnalyses';
+    container.className = 'available-analyses';
+
+    const modeBadgeClass = {
+        'simple': 'mode-badge-simple',
+        'medium': 'mode-badge-medium',
+        'hard': 'mode-badge-hard'
+    };
+
+    const modeLabel = {
+        'simple': 'Rapide',
+        'medium': 'Équilibré',
+        'hard': 'Approfondi'
+    };
+
+    const analysesHtml = data.analyses.map(analysis => {
+        const ageText = analysis.age_days === 0 ? "Aujourd'hui" :
+                       analysis.age_days === 1 ? "Il y a 1 jour" :
+                       `Il y a ${analysis.age_days} jours`;
+
+        const ratingText = analysis.rating_count > 0
+            ? `⭐ ${analysis.average_rating.toFixed(1)} (${analysis.rating_count})`
+            : '✨ Pas encore noté';
+
+        const badgeClass = modeBadgeClass[analysis.analysis_mode] || 'mode-badge-simple';
+        const label = modeLabel[analysis.analysis_mode] || analysis.analysis_mode;
+
+        return `
+            <div class="analysis-card" data-mode="${analysis.analysis_mode}">
+                <div class="analysis-header">
+                    <span class="mode-badge ${badgeClass}">${label}</span>
+                    <span class="analysis-age">${ageText}</span>
+                </div>
+                <div class="analysis-stats">
+                    <span class="analysis-rating">${ratingText}</span>
+                    <span class="analysis-args">${analysis.arguments_count} arguments</span>
+                </div>
+                <div class="analysis-actions">
+                    <button class="btn-view-analysis btn-secondary" data-mode="${analysis.analysis_mode}">
+                        👁️ Voir l'analyse
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="available-analyses-header">
+            <h3>📋 Analyses disponibles</h3>
+            <p class="subtitle">Cette vidéo a déjà été analysée</p>
+        </div>
+        <div class="analyses-grid">
+            ${analysesHtml}
+        </div>
+    `;
+
+    // Insérer avant le bouton analyser
+    controlsDiv.insertBefore(container, controlsDiv.firstChild);
+
+    // Ajouter les event listeners pour les boutons "Voir"
+    const viewButtons = container.querySelectorAll('.btn-view-analysis');
+    viewButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const mode = btn.dataset.mode;
+            if (onViewAnalysis) {
+                onViewAnalysis(mode);
+            }
+        });
+    });
+}
+
+/**
  * Rend les résultats de l'analyse
  */
 export function renderResults(data) {

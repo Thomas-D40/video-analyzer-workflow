@@ -69,6 +69,51 @@ export async function checkHealth() {
 }
 
 /**
+ * Extrait l'ID d'une vidéo YouTube depuis l'URL
+ * @param {string} url - URL YouTube
+ * @returns {string|null} - ID de la vidéo ou null
+ */
+export function extractVideoId(url) {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.searchParams.get('v');
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Récupère les analyses disponibles pour une vidéo
+ * @param {string} videoId - ID de la vidéo YouTube
+ * @returns {Promise<Object>} - Liste des analyses disponibles
+ */
+export async function getAvailableAnalyses(videoId) {
+    const headers = { 'Content-Type': 'application/json' };
+
+    // Ajouter la clé API si disponible
+    const apiKey = getCurrentApiKey();
+    if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+    }
+
+    const { getApiBaseUrl } = await import('./config.js');
+    const baseUrl = getApiBaseUrl();
+    const response = await fetch(`${baseUrl}/api/analyze/${videoId}/available`, {
+        method: 'GET',
+        headers: headers
+    });
+
+    if (!response.ok) {
+        // Si l'API retourne une erreur, on retourne juste une liste vide
+        // (pas besoin de bloquer l'utilisateur)
+        console.warn('Failed to fetch available analyses:', response.status);
+        return { analyses: [], total_count: 0 };
+    }
+
+    return await response.json();
+}
+
+/**
  * Récupère l'URL de la vidéo YouTube active
  * @returns {Promise<string>} - URL de la vidéo
  */

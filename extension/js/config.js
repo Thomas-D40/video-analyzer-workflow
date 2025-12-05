@@ -49,6 +49,17 @@ export function getApiUrl() {
 }
 
 /**
+ * Obtient l'URL de base de l'API (sans /api/analyze)
+ * @returns {string}
+ */
+export function getApiBaseUrl() {
+    // Extraire le base URL depuis l'URL complète
+    const url = currentConfig.apiUrl;
+    // https://46.202.128.11:8000/api/analyze -> https://46.202.128.11:8000
+    return url.replace(/\/api\/analyze$/, '');
+}
+
+/**
  * Obtient l'URL de health check
  * @returns {string}
  */

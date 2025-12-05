@@ -35,14 +35,22 @@ from app.utils.report_formatter import generate_markdown_report
 from app.core.parallel_research import research_all_arguments_parallel
 
 
-from app.services.storage import save_analysis, get_analysis
+from app.services.storage import save_analysis, select_best_cached_analysis
 
-async def process_video(youtube_url: str, force_refresh: bool = False, youtube_cookies: str = None) -> Dict[str, Any]:
+async def process_video(
+    youtube_url: str,
+    force_refresh: bool = False,
+    youtube_cookies: str = None,
+    analysis_mode: str = "simple"
+) -> Dict[str, Any]:
     """
     Processes a YouTube video and returns the complete analysis.
 
     Args:
         youtube_url: YouTube video URL
+        force_refresh: Force re-analysis even if cached
+        youtube_cookies: Cookies for age-restricted videos
+        analysis_mode: "simple" (fast, abstracts), "medium" (3 full-texts), "hard" (6 full-texts)
 
     Returns:
         Dictionary containing:
@@ -60,16 +68,41 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
     if not video_id:
         raise ValueError("Unable to extract video ID from URL")
 
-    # Step 1.5: Check cache
+    # Step 1.5: Smart cache selection
     if not force_refresh:
-        cached_analysis = await get_analysis(video_id)
+        cached_analysis, cache_metadata = await select_best_cached_analysis(
+            video_id,
+            requested_mode=analysis_mode,
+            max_age_days=7  # Consider analyses older than 7 days as stale
+        )
+
         if cached_analysis and cached_analysis.status == "completed":
-            print(f"[INFO] Cached analysis found for {video_id}")
+            # Cache hit! Return cached analysis with metadata
+            print(f"[INFO] {cache_metadata['message']}")
             result = cached_analysis.content
-            # Add cache metadata
+
+            # Add comprehensive cache metadata (including ratings)
             result["cached"] = True
-            result["last_updated"] = cached_analysis.updated_at.isoformat()
+            result["cache_info"] = {
+                "reason": cache_metadata["reason"],
+                "message": cache_metadata["message"],
+                "selected_mode": cache_metadata.get("selected_mode", analysis_mode),
+                "requested_mode": analysis_mode,
+                "age_days": cache_metadata.get("age_days", 0),
+                "last_updated": cached_analysis.updated_at.isoformat(),
+                "average_rating": cache_metadata.get("rating", 0.0),
+                "rating_count": cache_metadata.get("rating_count", 0),
+                "composite_score": cache_metadata.get("composite_score"),
+                "available_analyses": cache_metadata.get("available_modes", [])
+            }
+
             return result
+        else:
+            # No suitable cache, proceed with new analysis
+            print(f"[INFO] {cache_metadata['message']}")
+            if cache_metadata.get("available_modes"):
+                print(f"[INFO] Available modes: {cache_metadata['available_modes']}")
+            print(f"[INFO] Starting new analysis in mode '{analysis_mode}'")
 
     # Step 2: Extract transcript
     transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)
@@ -92,7 +125,7 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
     
     # Step 4 & 5: Research and Analysis (PARALLEL EXECUTION)
     # Process all arguments in parallel for better performance
-    enriched_arguments = await research_all_arguments_parallel(arguments)
+    enriched_arguments = await research_all_arguments_parallel(arguments, analysis_mode=analysis_mode)
     
     # Step 6: Reliability calculation
     try:
@@ -138,13 +171,14 @@ async def process_video(youtube_url: str, force_refresh: bool = False, youtube_c
         "youtube_url": youtube_url,
         "language": language,
         "arguments": arguments,
-        "report_markdown": report_markdown
+        "report_markdown": report_markdown,
+        "analysis_mode": analysis_mode
     }
 
     # Save to database
     try:
-        await save_analysis(video_id, youtube_url, result)
-        print(f"[INFO] Analysis saved for {video_id}")
+        await save_analysis(video_id, youtube_url, result, analysis_mode=analysis_mode)
+        print(f"[INFO] Analysis saved for {video_id} (mode: {analysis_mode})")
     except Exception as e:
         print(f"[ERROR] Database save error: {e}")
 

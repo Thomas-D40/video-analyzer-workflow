@@ -103,7 +103,8 @@ async def research_single_agent(
 async def research_argument_parallel(
     argument_text: str,
     argument_en: str,
-    arg_data: Dict[str, Any]
+    arg_data: Dict[str, Any],
+    analysis_mode: str = "abstract_only"
 ) -> Dict[str, Any]:
     """
     Execute research for a single argument with parallel API calls.
@@ -112,6 +113,7 @@ async def research_argument_parallel(
         argument_text: Original argument text
         argument_en: English version for research
         arg_data: Original argument data
+        analysis_mode: "abstract_only" (fast, cheap) or "full_text_enrichment" (deep, expensive)
 
     Returns:
         Enriched argument with research results
@@ -160,15 +162,26 @@ async def research_argument_parallel(
     print(f"[INFO parallel] Argument: {argument_text[:50]}...")
     print(f"[INFO parallel] Total sources: {len(all_sources)}")
 
-    # Step 4.5: Enrichment - Screen for relevance
+    # Determine enrichment settings based on analysis mode
     settings = get_settings()
-    screening_enabled = getattr(settings, 'fulltext_screening_enabled', True)
 
-    if screening_enabled and all_sources:
+    # Map analysis modes to configuration
+    mode_config = {
+        "simple": {"enabled": False, "top_n": 0, "min_score": 0.0},
+        "medium": {"enabled": True, "top_n": 3, "min_score": 0.6},
+        "hard": {"enabled": True, "top_n": 6, "min_score": 0.5},
+    }
+
+    config = mode_config.get(analysis_mode, mode_config["simple"])
+    enrichment_enabled = config["enabled"]
+    top_n = config["top_n"]
+    min_score = config["min_score"]
+
+    print(f"[INFO parallel] Analysis mode: {analysis_mode} (full-text: {top_n}, threshold: {min_score})")
+
+    # Step 4.5: Enrichment - Screen for relevance
+    if enrichment_enabled and all_sources:
         try:
-            top_n = getattr(settings, 'fulltext_top_n', 3)
-            min_score = getattr(settings, 'fulltext_min_score', 0.6)
-
             print(f"[INFO parallel] Screening {len(all_sources)} sources (top_n={top_n}, min_score={min_score})...")
 
             selected_sources, rejected_sources = await _run_in_executor(
@@ -188,17 +201,17 @@ async def research_argument_parallel(
         except Exception as e:
             print(f"[ERROR parallel] Screening error: {e}")
             # Fallback: use simple top-N selection
-            selected_sources = all_sources[:3]
-            rejected_sources = all_sources[3:]
+            selected_sources = all_sources[:top_n] if top_n > 0 else []
+            rejected_sources = all_sources[top_n:] if top_n > 0 else all_sources
     else:
-        print("[INFO parallel] Screening disabled, using all sources")
-        selected_sources = all_sources
-        rejected_sources = []
+        print(f"[INFO parallel] Enrichment disabled for mode '{analysis_mode}', using abstracts only")
+        selected_sources = []
+        rejected_sources = all_sources
 
     # Step 4.6: Enrichment - Fetch full text for top sources
     web_fetch_enabled = getattr(settings, 'mcp_web_fetch_enabled', False)
 
-    if web_fetch_enabled and selected_sources:
+    if enrichment_enabled and web_fetch_enabled and selected_sources:
         try:
             print(f"[INFO parallel] Fetching full text for {len(selected_sources)} selected sources...")
 
@@ -262,7 +275,8 @@ async def research_argument_parallel(
 
 
 async def research_all_arguments_parallel(
-    arguments: List[Dict[str, Any]]
+    arguments: List[Dict[str, Any]],
+    analysis_mode: str = "simple"
 ) -> List[Dict[str, Any]]:
     """
     Execute research for all arguments in parallel.
@@ -272,6 +286,7 @@ async def research_all_arguments_parallel(
 
     Args:
         arguments: List of arguments to research
+        analysis_mode: "simple" (fast, abstracts only), "medium" (3 full-texts), "hard" (6 full-texts)
 
     Returns:
         List of enriched arguments with research results
@@ -281,20 +296,21 @@ async def research_all_arguments_parallel(
         ...     {"argument": "Coffee causes cancer", "argument_en": "Coffee causes cancer"},
         ...     {"argument": "GDP is rising", "argument_en": "GDP is rising"}
         ... ]
-        >>> enriched = await research_all_arguments_parallel(arguments)
+        >>> enriched = await research_all_arguments_parallel(arguments, analysis_mode="medium")
         >>> print(f"Processed {len(enriched)} arguments")
     """
     if not arguments:
         return []
 
-    print(f"[INFO parallel] Starting parallel research for {len(arguments)} arguments")
+    print(f"[INFO parallel] Starting parallel research for {len(arguments)} arguments (mode: {analysis_mode})")
 
     # Create tasks for each argument
     tasks = [
         research_argument_parallel(
             arg_data["argument"],
             arg_data["argument_en"],
-            arg_data
+            arg_data,
+            analysis_mode
         )
         for arg_data in arguments
     ]

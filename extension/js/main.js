@@ -45,15 +45,32 @@ async function init() {
         // Récupérer l'URL de la vidéo YouTube
         currentVideoUrl = await API.getCurrentVideoUrl();
 
-        // Vérifier si une analyse existe en cache
+        // Vérifier si une analyse existe en cache local
         const cachedData = await cache.get(currentVideoUrl);
 
         if (cachedData) {
-            console.log("Données récupérées du cache");
+            console.log("Données récupérées du cache local");
             UI.renderResults(cachedData);
         } else {
             // Afficher le bouton "Analyser"
             UI.showControls();
+
+            // Récupérer les analyses disponibles depuis le serveur
+            const videoId = API.extractVideoId(currentVideoUrl);
+            if (videoId) {
+                try {
+                    const availableAnalyses = await API.getAvailableAnalyses(videoId);
+                    if (availableAnalyses && availableAnalyses.analyses && availableAnalyses.analyses.length > 0) {
+                        console.log(`${availableAnalyses.total_count} analyses disponibles`);
+                        UI.renderAvailableAnalyses(availableAnalyses, (mode) => {
+                            viewExistingAnalysis(mode);
+                        });
+                    }
+                } catch (e) {
+                    console.warn("Impossible de récupérer les analyses disponibles:", e);
+                    // Continue normally - not a critical error
+                }
+            }
         }
 
     } catch (e) {
