@@ -2,8 +2,14 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from ..db.mongo import get_database
 from ..models.analysis import VideoAnalysis
+from ..constants import AnalysisMode, AnalysisStatus, CACHE_MAX_AGE_DAYS
 
-async def save_analysis(video_id: str, youtube_url: str, content: Dict[str, Any], analysis_mode: str = "simple") -> VideoAnalysis:
+async def save_analysis(
+    video_id: str,
+    youtube_url: str,
+    content: Dict[str, Any],
+    analysis_mode: AnalysisMode = AnalysisMode.SIMPLE
+) -> VideoAnalysis:
     """
     Sauvegarde ou met à jour une analyse dans la base de données.
 
@@ -11,7 +17,7 @@ async def save_analysis(video_id: str, youtube_url: str, content: Dict[str, Any]
         video_id: YouTube video ID
         youtube_url: YouTube video URL
         content: Analysis content (arguments, sources, etc.)
-        analysis_mode: "simple" (abstracts), "medium" (3 full-texts), "hard" (6 full-texts)
+        analysis_mode: Analysis mode (see AnalysisMode enum)
     """
     db = await get_database()
     collection = db.analyses
@@ -22,8 +28,8 @@ async def save_analysis(video_id: str, youtube_url: str, content: Dict[str, Any]
         "id": video_id,
         "youtube_url": youtube_url,
         "updated_at": now,
-        "status": "completed",
-        "analysis_mode": analysis_mode,
+        "status": AnalysisStatus.COMPLETED.value,
+        "analysis_mode": analysis_mode.value,
         "content": content
     }
 
@@ -39,16 +45,19 @@ async def save_analysis(video_id: str, youtube_url: str, content: Dict[str, Any]
     )
 
     # Retrieve the document with composite key
-    doc = await collection.find_one({"id": video_id, "analysis_mode": analysis_mode})
+    doc = await collection.find_one({"id": video_id, "analysis_mode": analysis_mode.value})
     return VideoAnalysis(**doc)
 
-async def get_analysis(video_id: str, analysis_mode: str = "simple") -> Optional[VideoAnalysis]:
+async def get_analysis(
+    video_id: str,
+    analysis_mode: AnalysisMode = AnalysisMode.SIMPLE
+) -> Optional[VideoAnalysis]:
     """
     Récupère une analyse par son ID vidéo et son mode d'analyse.
 
     Args:
         video_id: YouTube video ID
-        analysis_mode: Analysis mode ("simple", "medium", "hard")
+        analysis_mode: Analysis mode (see AnalysisMode enum)
 
     Returns:
         VideoAnalysis if found, None otherwise
@@ -59,7 +68,7 @@ async def get_analysis(video_id: str, analysis_mode: str = "simple") -> Optional
     db = await get_database()
     collection = db.analyses
 
-    doc = await collection.find_one({"id": video_id, "analysis_mode": analysis_mode})
+    doc = await collection.find_one({"id": video_id, "analysis_mode": analysis_mode.value})
     if doc:
         return VideoAnalysis(**doc)
     return None
@@ -93,8 +102,8 @@ async def get_all_analyses_for_video(video_id: str) -> List[VideoAnalysis]:
 
 async def select_best_cached_analysis(
     video_id: str,
-    requested_mode: str = "simple",
-    max_age_days: int = 7
+    requested_mode: AnalysisMode = AnalysisMode.SIMPLE,
+    max_age_days: int = CACHE_MAX_AGE_DAYS
 ) -> Tuple[Optional[VideoAnalysis], Dict[str, Any]]:
     """
     Sélectionne la meilleure analyse en cache selon une stratégie intelligente.
@@ -124,8 +133,12 @@ async def select_best_cached_analysis(
         ...     print(f"Need new analysis: {meta['reason']}")
     """
     # Hiérarchie de qualité
-    quality_hierarchy = {"hard": 3, "medium": 2, "simple": 1}
-    requested_quality = quality_hierarchy.get(requested_mode, 1)
+    quality_hierarchy = {
+        AnalysisMode.HARD.value: 3,
+        AnalysisMode.MEDIUM.value: 2,
+        AnalysisMode.SIMPLE.value: 1
+    }
+    requested_quality = quality_hierarchy.get(requested_mode.value, 1)
 
     # Récupérer toutes les analyses
     all_analyses = await get_all_analyses_for_video(video_id)
@@ -143,7 +156,7 @@ async def select_best_cached_analysis(
 
     recent_analyses = [
         a for a in all_analyses
-        if (now - a.updated_at) <= max_age and a.status == "completed"
+        if (now - a.updated_at) <= max_age and a.status == AnalysisStatus.COMPLETED
     ]
 
     # Construire la liste des modes disponibles (avec ratings)
@@ -155,7 +168,7 @@ async def select_best_cached_analysis(
             "average_rating": a.average_rating,
             "rating_count": a.rating_count
         }
-        for a in all_analyses if a.status == "completed"
+        for a in all_analyses if a.status == AnalysisStatus.COMPLETED
     ]
 
     # Cas 1: Aucune analyse récente
@@ -173,7 +186,7 @@ async def select_best_cached_analysis(
 
     # Cas 2: Chercher le mode exact demandé
     exact_match = next(
-        (a for a in recent_analyses if a.analysis_mode == requested_mode),
+        (a for a in recent_analyses if a.analysis_mode == requested_mode.value),
         None
     )
 
@@ -276,7 +289,7 @@ async def select_best_cached_analysis(
 
 async def submit_rating(
     video_id: str,
-    analysis_mode: str,
+    analysis_mode: AnalysisMode,
     rating: float
 ) -> Optional[VideoAnalysis]:
     """
@@ -284,7 +297,7 @@ async def submit_rating(
 
     Args:
         video_id: YouTube video ID
-        analysis_mode: Analysis mode ("simple", "medium", "hard")
+        analysis_mode: Analysis mode (see AnalysisMode enum)
         rating: User rating (1.0-5.0)
 
     Returns:

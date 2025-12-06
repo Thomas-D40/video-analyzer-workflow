@@ -45,20 +45,43 @@ async function init() {
         // Récupérer l'URL de la vidéo YouTube
         currentVideoUrl = await API.getCurrentVideoUrl();
 
-        // Auto-check DB for existing analysis
+        // Check if analysis exists in local cache first
+        const cachedData = await cache.get(currentVideoUrl);
+        if (cachedData) {
+            console.log("Données récupérées du cache local");
+            UI.renderResults(cachedData);
+            UI.showAnalysisStatus(cachedData);
+            return;
+        }
+
+        // Check DB for existing analysis WITHOUT triggering new analysis
         UI.showLoading('Vérification de l\'analyse...');
 
-        try {
-            const response = await API.analyzeVideo(currentVideoUrl, false);
+        const videoId = API.extractVideoId(currentVideoUrl);
+        if (!videoId) {
+            UI.hideLoading();
+            UI.showNoAnalysisState();
+            return;
+        }
 
-            // Analysis found - render and show status
-            await cache.set(currentVideoUrl, response.data);
-            UI.renderResults(response.data);
-            UI.showAnalysisStatus(response.data);
+        try {
+            const availableAnalyses = await API.getAvailableAnalyses(videoId);
+
+            if (availableAnalyses && availableAnalyses.analyses && availableAnalyses.analyses.length > 0) {
+                // Analysis exists - fetch it
+                const response = await API.analyzeVideo(currentVideoUrl, false);
+                await cache.set(currentVideoUrl, response.data);
+                UI.renderResults(response.data);
+                UI.showAnalysisStatus(response.data);
+            } else {
+                // No analysis found
+                UI.hideLoading();
+                UI.showNoAnalysisState();
+            }
 
         } catch (error) {
-            // No analysis found or error
-            console.log('No existing analysis:', error.message);
+            // Error checking for analysis
+            console.log('Error checking for analysis:', error.message);
             UI.hideLoading();
             UI.showNoAnalysisState();
         }
@@ -85,8 +108,12 @@ async function analyzeVideo(forceRefresh = false) {
             currentVideoUrl = await API.getCurrentVideoUrl();
         }
 
+        // Get selected analysis mode
+        const analysisMode = UI.getSelectedMode();
+        console.log('[Main] Starting analysis with mode:', analysisMode);
+
         // Appel API
-        const response = await API.analyzeVideo(currentVideoUrl, forceRefresh);
+        const response = await API.analyzeVideo(currentVideoUrl, forceRefresh, analysisMode);
 
         // Sauvegarder en cache
         await cache.set(currentVideoUrl, response.data);

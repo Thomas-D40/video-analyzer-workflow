@@ -11,9 +11,10 @@ import { getApiUrl } from './config.js';
  * Analyse une vidéo YouTube
  * @param {string} url - URL de la vidéo YouTube
  * @param {boolean} forceRefresh - Force une nouvelle analyse (ignore le cache)
+ * @param {string} analysisMode - Mode d'analyse: 'simple', 'medium', 'hard'
  * @returns {Promise<Object>} - Données de l'analyse
  */
-export async function analyzeVideo(url, forceRefresh = false) {
+export async function analyzeVideo(url, forceRefresh = false, analysisMode = 'simple') {
     const headers = { 'Content-Type': 'application/json' };
 
     // Ajouter la clé API si disponible
@@ -31,6 +32,7 @@ export async function analyzeVideo(url, forceRefresh = false) {
         body: JSON.stringify({
             url: url,
             force_refresh: forceRefresh,
+            analysis_mode: analysisMode,
             youtube_cookies: youtubeCookies  // Ajouter les cookies dans le body
         })
     });

@@ -8,6 +8,7 @@ let videoSummary, argumentsList, rawReport;
 let modal, closeModalBtn, modalSourcesList;
 let analyzeBtn, newAnalysisBtn, copyBtn, controlsDiv;
 let analysisStatusDiv, statusMetadataDiv, toggleResultsBtn, reAnalyzeBtn, statusIcon, statusText;
+let analysisModeSelect;
 
 // État
 let currentAnalysisData = null;
@@ -29,6 +30,7 @@ export function initUIElements() {
     analyzeBtn = document.getElementById('analyzeBtn');
     newAnalysisBtn = document.getElementById('newAnalysisBtn');
     copyBtn = document.getElementById('copyBtn');
+    analysisModeSelect = document.getElementById('analysisMode');
 
     // New status panel elements
     analysisStatusDiv = document.getElementById('analysisStatus');
@@ -125,15 +127,39 @@ export function hideControls() {
 export function showAnalysisStatus(data) {
     if (!analysisStatusDiv) return;
 
+    console.log('[UI] showAnalysisStatus called with data:', data);
+
     const argCount = data.arguments_count !== undefined ? data.arguments_count : (data.arguments ? data.arguments.length : 0);
 
     let dateStr = 'Date inconnue';
-    if (data.last_updated) {
-        const date = new Date(data.last_updated);
-        dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    // Check multiple possible date fields
+    const dateSource = data.last_updated || data.cache_info?.last_updated || data.updated_at || data.created_at;
+    console.log('[UI] Date source found:', dateSource);
+
+    if (dateSource) {
+        const date = new Date(dateSource);
+        console.log('[UI] Parsed date:', date, 'isValid:', !isNaN(date.getTime()));
+
+        if (!isNaN(date.getTime())) {
+            dateStr = date.toLocaleString('fr-FR', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            console.log('[UI] Formatted date:', dateStr);
+        }
     }
 
-    const mode = data.mode || 'Standard';
+    // Check multiple possible mode fields
+    const modeRaw = data.analysis_mode || data.mode || data.cache_info?.selected_mode || 'simple';
+    const modeLabels = {
+        'simple': 'Rapide',
+        'medium': 'Équilibré',
+        'hard': 'Approfondi'
+    };
+    const mode = modeLabels[modeRaw] || modeRaw;
 
     if (statusIcon) statusIcon.textContent = '✓';
     if (statusText) statusText.textContent = 'Analyse disponible';
@@ -314,10 +340,19 @@ export function renderResults(data) {
     const argCount = data.arguments_count !== undefined ? data.arguments_count : (data.arguments ? data.arguments.length : 0);
 
     let dateHtml = '';
-    if (data.last_updated) {
-        const date = new Date(data.last_updated);
-        const dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-        dateHtml = `<div class="summary-date">Mis à jour le ${dateStr}</div>`;
+    // Check multiple possible date fields
+    const dateSource = data.last_updated || data.cache_info?.last_updated || data.updated_at || data.created_at;
+    if (dateSource) {
+        const date = new Date(dateSource);
+        if (!isNaN(date.getTime())) {
+            const dateStr = date.toLocaleString('fr-FR', {
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            dateHtml = `<div class="summary-date">Mis à jour le ${dateStr}</div>`;
+        }
     }
 
     if (videoSummary) {
@@ -611,4 +646,11 @@ export function getButtons() {
  */
 export function getRawReport() {
     return rawReport;
+}
+
+/**
+ * Retourne le mode d'analyse sélectionné
+ */
+export function getSelectedMode() {
+    return analysisModeSelect ? analysisModeSelect.value : 'simple';
 }

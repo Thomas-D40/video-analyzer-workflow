@@ -36,12 +36,18 @@ from app.core.parallel_research import research_all_arguments_parallel
 
 
 from app.services.storage import save_analysis, select_best_cached_analysis
+from app.constants import (
+    AnalysisMode,
+    AnalysisStatus,
+    CACHE_MAX_AGE_DAYS,
+    TRANSCRIPT_MIN_LENGTH
+)
 
 async def process_video(
     youtube_url: str,
     force_refresh: bool = False,
     youtube_cookies: str = None,
-    analysis_mode: str = "simple"
+    analysis_mode: AnalysisMode = AnalysisMode.SIMPLE
 ) -> Dict[str, Any]:
     """
     Processes a YouTube video and returns the complete analysis.
@@ -50,7 +56,7 @@ async def process_video(
         youtube_url: YouTube video URL
         force_refresh: Force re-analysis even if cached
         youtube_cookies: Cookies for age-restricted videos
-        analysis_mode: "simple" (fast, abstracts), "medium" (3 full-texts), "hard" (6 full-texts)
+        analysis_mode: Analysis mode (see AnalysisMode enum)
 
     Returns:
         Dictionary containing:
@@ -73,10 +79,10 @@ async def process_video(
         cached_analysis, cache_metadata = await select_best_cached_analysis(
             video_id,
             requested_mode=analysis_mode,
-            max_age_days=7  # Consider analyses older than 7 days as stale
+            max_age_days=CACHE_MAX_AGE_DAYS
         )
 
-        if cached_analysis and cached_analysis.status == "completed":
+        if cached_analysis and cached_analysis.status == AnalysisStatus.COMPLETED:
             # Cache hit! Return cached analysis with metadata
             print(f"[INFO] {cache_metadata['message']}")
             result = cached_analysis.content
@@ -106,7 +112,7 @@ async def process_video(
 
     # Step 2: Extract transcript
     transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)
-    if not transcript_text or len(transcript_text.strip()) < 50:
+    if not transcript_text or len(transcript_text.strip()) < TRANSCRIPT_MIN_LENGTH:
         raise ValueError("Transcript not found or too short")
 
     # Step 3: Extract arguments with language detection

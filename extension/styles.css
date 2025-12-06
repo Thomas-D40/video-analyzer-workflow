@@ -49,8 +49,43 @@ h1 {
     padding: 32px;
     flex: 1;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     justify-content: center;
+    gap: 16px;
+}
+
+.mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mode-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a5568;
+}
+
+.mode-select {
+    padding: 10px 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #2d3748;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mode-select:hover {
+    border-color: #cbd5e0;
+}
+
+.mode-select:focus {
+    outline: none;
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
 }
 
 .btn-primary {

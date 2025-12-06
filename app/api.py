@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.core.auth import verify_api_key
 from app.services.storage import submit_rating, get_all_analyses_for_video
 from app.utils.youtube import extract_video_id
+from app.constants import AnalysisMode, AnalysisStatus
 
 # Configuration du logging
 logging.basicConfig(
@@ -49,7 +50,7 @@ class AnalyzeRequest(BaseModel):
     url: str
     force_refresh: bool = False
     youtube_cookies: Optional[str] = None
-    analysis_mode: str = "simple"  # "simple" (fast, abstracts), "medium" (3 full-texts), "hard" (6 full-texts)
+    analysis_mode: AnalysisMode = AnalysisMode.SIMPLE
 
 
 class AnalyzeResponse(BaseModel):
