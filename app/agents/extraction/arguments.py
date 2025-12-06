@@ -58,15 +58,15 @@ For educational or popularization videos, consider **key explanatory points** as
 5. **IMPORTANT**: Provide BOTH the original French text AND an English translation for research
 
 **JSON FORMAT:**
-{
+{{
   "arguments": [
-    {
+    {{
       "argument": "French text of the argument",
       "argument_en": "English translation for research",
       "stance": "affirmatif"
-    }
+    }}
   ]
-}
+}}
 
 Include ONLY substantial arguments. If video contains only banalities, return empty list."""
 
