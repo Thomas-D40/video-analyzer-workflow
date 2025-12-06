@@ -27,7 +27,8 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(ls:*)",
-      "Bash(PYTHONPATH=/mnt/e/Développement/video-analyzer-workflow python3:*)"
+      "Bash(PYTHONPATH=/mnt/e/Développement/video-analyzer-workflow python3:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

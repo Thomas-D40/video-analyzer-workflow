@@ -557,11 +557,14 @@ function createArgumentCard(arg, index) {
     }
 
     const card = document.createElement('div');
-    card.className = 'arg-card';
+    card.className = 'arg-card collapsed';
     card.id = `arg-${index}`;
     card.innerHTML = `
-        <div class="arg-header" style="cursor: default;">
-            <div class="arg-title">"${arg.argument}"</div>
+        <div class="arg-header" style="cursor: pointer;">
+            <div class="arg-title-container">
+                <span class="expand-arrow">▼</span>
+                <div class="arg-title">"${arg.argument}"</div>
+            </div>
             <div class="reliability-container">
                 <span class="reliability-badge ${reliabilityClass}">${reliabilityLabel}</span>
                 <span class="reliability-score">${reliabilityPercent}</span>
@@ -571,6 +574,12 @@ function createArgumentCard(arg, index) {
             ${contentHtml}
         </div>
     `;
+
+    // Add click handler to toggle collapse
+    const header = card.querySelector('.arg-header');
+    header.addEventListener('click', () => {
+        card.classList.toggle('collapsed');
+    });
 
     return card;
 }
