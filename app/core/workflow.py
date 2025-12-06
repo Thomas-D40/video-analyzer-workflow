@@ -15,7 +15,7 @@ from typing import Dict, List, Any
 from app.utils.youtube import extract_video_id
 from app.utils.transcript import extract_transcript
 from app.agents.extraction import extract_arguments
-from app.agents.research import (
+from app.services.research import (
     search_arxiv,
     search_world_bank_data,
     search_pubmed,
@@ -38,7 +38,6 @@ from app.core.parallel_research import research_all_arguments_parallel
 from app.services.storage import save_analysis, select_best_cached_analysis
 from app.constants import (
     AnalysisMode,
-    AnalysisStatus,
     CACHE_MAX_AGE_DAYS,
     TRANSCRIPT_MIN_LENGTH
 )
@@ -76,29 +75,29 @@ async def process_video(
 
     # Step 1.5: Smart cache selection
     if not force_refresh:
-        cached_analysis, cache_metadata = await select_best_cached_analysis(
+        cache_result = await select_best_cached_analysis(
             video_id,
             requested_mode=analysis_mode,
             max_age_days=CACHE_MAX_AGE_DAYS
         )
 
-        if cached_analysis and cached_analysis.status == AnalysisStatus.COMPLETED:
+        cached_content, selected_mode, cache_metadata = cache_result
+
+        if cached_content and selected_mode:
             # Cache hit! Return cached analysis with metadata
             print(f"[INFO] {cache_metadata['message']}")
-            result = cached_analysis.content
+            result = cached_content.copy()  # Make a copy to avoid mutating cached data
 
             # Add comprehensive cache metadata (including ratings)
             result["cached"] = True
             result["cache_info"] = {
                 "reason": cache_metadata["reason"],
                 "message": cache_metadata["message"],
-                "selected_mode": cache_metadata.get("selected_mode", analysis_mode),
-                "requested_mode": analysis_mode,
+                "selected_mode": selected_mode.value,
+                "requested_mode": analysis_mode.value,
                 "age_days": cache_metadata.get("age_days", 0),
-                "last_updated": cached_analysis.updated_at.isoformat(),
                 "average_rating": cache_metadata.get("rating", 0.0),
                 "rating_count": cache_metadata.get("rating_count", 0),
-                "composite_score": cache_metadata.get("composite_score"),
                 "available_analyses": cache_metadata.get("available_modes", [])
             }
 
@@ -108,7 +107,7 @@ async def process_video(
             print(f"[INFO] {cache_metadata['message']}")
             if cache_metadata.get("available_modes"):
                 print(f"[INFO] Available modes: {cache_metadata['available_modes']}")
-            print(f"[INFO] Starting new analysis in mode '{analysis_mode}'")
+            print(f"[INFO] Starting new analysis in mode '{analysis_mode.value}'")
 
     # Step 2: Extract transcript
     transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)

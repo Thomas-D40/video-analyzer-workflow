@@ -14,7 +14,7 @@ import logging
 from app.core.workflow import process_video
 from app.config import get_settings
 from app.core.auth import verify_api_key
-from app.services.storage import submit_rating, get_all_analyses_for_video
+from app.services.storage import submit_rating, get_available_analyses
 from app.utils.youtube import extract_video_id
 from app.constants import AnalysisMode, AnalysisStatus
 
@@ -146,7 +146,7 @@ class AvailableAnalysesResponse(BaseModel):
 
 
 @app.get("/api/analyze/{video_id}/available", response_model=AvailableAnalysesResponse)
-async def get_available_analyses(video_id: str):
+async def get_available_analyses_endpoint(video_id: str):
     """
     Get all available analyses for a video.
 
@@ -191,9 +191,10 @@ async def get_available_analyses(video_id: str):
     from datetime import datetime
 
     try:
-        analyses = await get_all_analyses_for_video(video_id)
+        # Use new get_available_analyses function
+        available_data = await get_available_analyses(video_id)
 
-        if not analyses:
+        if not available_data:
             return AvailableAnalysesResponse(
                 status="success",
                 video_id=video_id,
@@ -202,31 +203,41 @@ async def get_available_analyses(video_id: str):
                 total_count=0
             )
 
-        # Build response with metadata
+        # Build response from nested structure
         now = datetime.utcnow()
-        available_analyses = []
+        available_analyses_list = []
 
-        for analysis in analyses:
-            age_days = (now - analysis.updated_at).days
-            arguments_count = len(analysis.content.get("arguments", []))
+        # Iterate through the analyses dict
+        for mode, analysis_dict in available_data["analyses"].items():
+            if analysis_dict is None:
+                continue
 
-            available_analyses.append(AvailableAnalysis(
-                analysis_mode=analysis.analysis_mode,
+            # Parse timestamps
+            created_at = datetime.fromisoformat(analysis_dict["created_at"].replace("Z", "+00:00"))
+            updated_at = datetime.fromisoformat(analysis_dict["updated_at"].replace("Z", "+00:00"))
+            age_days = (now - updated_at).days
+
+            # Get content
+            content = analysis_dict.get("content", {})
+            arguments_count = len(content.get("arguments", []))
+
+            available_analyses_list.append(AvailableAnalysis(
+                analysis_mode=mode,
                 age_days=age_days,
-                created_at=analysis.created_at.isoformat(),
-                updated_at=analysis.updated_at.isoformat(),
-                average_rating=analysis.average_rating,
-                rating_count=analysis.rating_count,
+                created_at=analysis_dict["created_at"],
+                updated_at=analysis_dict["updated_at"],
+                average_rating=analysis_dict.get("average_rating", 0.0),
+                rating_count=analysis_dict.get("rating_count", 0),
                 arguments_count=arguments_count,
-                status=analysis.status
+                status=analysis_dict.get("status", "completed")
             ))
 
         return AvailableAnalysesResponse(
             status="success",
             video_id=video_id,
-            youtube_url=analyses[0].youtube_url if analyses else f"https://youtube.com/watch?v={video_id}",
-            analyses=available_analyses,
-            total_count=len(available_analyses)
+            youtube_url=available_data["youtube_url"],
+            analyses=available_analyses_list,
+            total_count=len(available_analyses_list)
         )
 
     except Exception as e:
@@ -274,24 +285,52 @@ async def rate_analysis(
         HTTPException 400: Si le rating est invalide
     """
     try:
-        updated_analysis = await submit_rating(video_id, analysis_mode, request.rating)
+        # Convert string to AnalysisMode enum
+        try:
+            mode_enum = AnalysisMode(analysis_mode)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid analysis_mode: {analysis_mode}. Must be one of: simple, medium, hard"
+            )
 
-        if not updated_analysis:
+        # Submit rating (returns bool)
+        success = await submit_rating(video_id, mode_enum, request.rating)
+
+        if not success:
             raise HTTPException(
                 status_code=404,
                 detail=f"Analysis not found for video {video_id} in mode {analysis_mode}"
+            )
+
+        # Fetch updated analysis to return new average
+        available_data = await get_available_analyses(video_id)
+        if not available_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Video analysis not found after rating submission"
+            )
+
+        # Get the specific mode's data
+        analysis = available_data["analyses"].get(analysis_mode)
+        if not analysis:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Analysis mode {analysis_mode} not found"
             )
 
         return RatingResponse(
             status="success",
             video_id=video_id,
             analysis_mode=analysis_mode,
-            average_rating=updated_analysis.average_rating,
-            rating_count=updated_analysis.rating_count,
-            message=f"Rating submitted successfully. New average: {updated_analysis.average_rating:.2f} ({updated_analysis.rating_count} ratings)"
+            average_rating=analysis.get("average_rating", 0.0),
+            rating_count=analysis.get("rating_count", 0),
+            message=f"Rating submitted successfully. New average: {analysis.get('average_rating', 0.0):.2f} ({analysis.get('rating_count', 0)} ratings)"
         )
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error submitting rating: {str(e)}")

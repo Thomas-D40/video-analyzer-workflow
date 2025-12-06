@@ -8,7 +8,12 @@ import json
 from typing import List
 from openai import OpenAI
 from ...config import get_settings
+from ...constants import LLM_TEMP_TOPIC_CLASSIFICATION
+from ...prompts import JSON_OUTPUT_STRICT
 
+# ============================================================================
+# DATA STRUCTURES
+# ============================================================================
 
 # Mapping of categories to appropriate research agents
 # Only academic and official statistical sources - no general web search
@@ -26,6 +31,68 @@ CATEGORY_AGENTS_MAP = {
     "politics": ["semantic_scholar", "crossref"],
     "general": ["semantic_scholar", "crossref"]
 }
+
+# Available scientific categories
+AVAILABLE_CATEGORIES = [
+    "medicine", "biology", "psychology",
+    "economics",
+    "physics", "computer_science", "mathematics",
+    "environment",
+    "social_sciences", "education", "politics",
+    "general"
+]
+
+# Priority agent per category
+PRIORITY_AGENT_MAP = {
+    "medicine": "pubmed",
+    "biology": "pubmed",
+    "psychology": "pubmed",
+    "economics": "oecd",
+    "physics": "arxiv",
+    "computer_science": "arxiv",
+    "mathematics": "arxiv",
+    "environment": "semantic_scholar",
+    "social_sciences": "semantic_scholar",
+    "education": "semantic_scholar",
+    "politics": "semantic_scholar",
+    "general": "semantic_scholar"
+}
+
+# ============================================================================
+# PROMPTS
+# ============================================================================
+
+SYSTEM_PROMPT = "You are a precise scientific classifier that responds in JSON format."
+
+USER_PROMPT_TEMPLATE = """You are an expert in scientific classification.
+Analyze the following argument and identify the relevant scientific domains.
+
+Argument: "{argument}"
+
+Available categories:
+{categories}
+
+Choose 1 to 3 categories that best match this argument.
+If the argument touches multiple domains, list them in order of relevance.
+If no specific category matches, use "general".
+
+Examples:
+- "Le café augmente les risques de cancer" → ["medicine"]
+- "Le PIB français augmente" → ["economics"]
+- "Les trous noirs émettent des radiations" → ["physics"]
+- "Python est meilleur que Java" → ["computer_science"]
+- "Le réchauffement climatique menace la biodiversité" → ["environment", "biology"]
+
+{json_instruction}
+
+**RESPONSE FORMAT:**
+{{
+    "categories": ["category1", "category2"]
+}}"""
+
+# ============================================================================
+# LOGIC
+# ============================================================================
 
 
 def classify_argument_topic(argument: str) -> List[str]:
@@ -47,50 +114,22 @@ def classify_argument_topic(argument: str) -> List[str]:
 
     client = OpenAI(api_key=settings.openai_api_key)
 
-    # List of available categories
-    categories = [
-        "medicine", "biology", "psychology",
-        "economics",
-        "physics", "computer_science", "mathematics",
-        "environment",
-        "social_sciences", "education", "politics",
-        "general"
-    ]
-
-    prompt = f"""You are an expert in scientific classification.
-Analyze the following argument and identify the relevant scientific domains.
-
-Argument: "{argument}"
-
-Available categories:
-{', '.join(categories)}
-
-Choose 1 to 3 categories that best match this argument.
-If the argument touches multiple domains, list them in order of relevance.
-If no specific category matches, use "general".
-
-Examples:
-- "Le café augmente les risques de cancer" → ["medicine"]
-- "Le PIB français augmente" → ["economics"]
-- "Les trous noirs émettent des radiations" → ["physics"]
-- "Python est meilleur que Java" → ["computer_science"]
-- "Le réchauffement climatique menace la biodiversité" → ["environment", "biology"]
-
-Respond ONLY in JSON format:
-{{
-    "categories": ["category1", "category2"]
-}}
-"""
+    # Build user prompt from template
+    user_prompt = USER_PROMPT_TEMPLATE.format(
+        argument=argument,
+        categories=', '.join(AVAILABLE_CATEGORIES),
+        json_instruction=JSON_OUTPUT_STRICT
+    )
 
     try:
         response = client.chat.completions.create(
-            model=settings.openai_model,  # gpt-4o-mini par défaut
+            model=settings.openai_model,
             messages=[
-                {"role": "system", "content": "You are a precise scientific classifier that responds in JSON format."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.3
+            temperature=LLM_TEMP_TOPIC_CLASSIFICATION
         )
 
         content = response.choices[0].message.content
@@ -98,7 +137,7 @@ Respond ONLY in JSON format:
         categories_list = data.get("categories", ["general"])
 
         # Validation: ensure categories are valid
-        valid_categories = [c for c in categories_list if c in categories]
+        valid_categories = [c for c in categories_list if c in AVAILABLE_CATEGORIES]
         if not valid_categories:
             valid_categories = ["general"]
 
@@ -155,22 +194,7 @@ def get_research_strategy(argument: str) -> dict:
 
     # Determine the priority agent based on the primary category
     primary_category = categories[0] if categories else "general"
-    priority_map = {
-        "medicine": "pubmed",
-        "biology": "pubmed",
-        "psychology": "pubmed",
-        "economics": "oecd",
-        "physics": "arxiv",
-        "computer_science": "arxiv",
-        "mathematics": "arxiv",
-        "environment": "semantic_scholar",
-        "social_sciences": "semantic_scholar",
-        "education": "semantic_scholar",
-        "politics": "semantic_scholar",
-        "general": "semantic_scholar"
-    }
-
-    priority_agent = priority_map.get(primary_category, "semantic_scholar")
+    priority_agent = PRIORITY_AGENT_MAP.get(primary_category, "semantic_scholar")
 
     return {
         "categories": categories,

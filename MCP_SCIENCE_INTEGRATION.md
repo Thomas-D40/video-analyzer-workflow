@@ -32,7 +32,7 @@ The repository contains **12 MCP servers**, with several highly relevant for aca
 
 **Integration Path:**
 ```python
-# app/agents/research/txyz.py
+# app/services/research/txyz.py
 def search_txyz(query: str, max_results: int = 5) -> List[Dict]:
     """
     Search academic and web sources via TXYZ API.
@@ -202,7 +202,7 @@ def call_mcp_server(server_name: str, tool: str, params: Dict) -> Dict:
 
 **Goal:** Test TXYZ as potential unified search agent
 
-1. Create `app/agents/research/txyz.py` (test implementation)
+1. Create `app/services/research/txyz.py` (test implementation)
 2. Run comparative study:
    - Same queries to TXYZ vs. existing agents
    - Compare result quality, relevance, coverage

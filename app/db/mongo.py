@@ -31,15 +31,23 @@ async def _ensure_indexes():
     if db.db is None:
         return
 
-    # Index composite sur (id, analysis_mode) pour les analyses
-    # Permet de stocker plusieurs analyses du même vidéo avec différents modes
-    analyses_collection = db.db.analyses
-    await analyses_collection.create_index(
-        [("id", 1), ("analysis_mode", 1)],
-        unique=True,
-        name="video_analysis_composite_key"
+    # Index sur _id pour les analyses vidéo (créé automatiquement par MongoDB)
+    # Chaque document représente une vidéo avec plusieurs modes d'analyse imbriqués
+    video_analyses_collection = db.db.video_analyses
+
+    # Index sur youtube_url pour recherche rapide
+    await video_analyses_collection.create_index(
+        [("youtube_url", 1)],
+        name="youtube_url_index"
     )
-    print("[INFO] Index MongoDB créés: analyses (id, analysis_mode)")
+
+    # Index sur updated_at pour tri chronologique
+    await video_analyses_collection.create_index(
+        [("updated_at", -1)],
+        name="updated_at_index"
+    )
+
+    print("[INFO] Index MongoDB créés: video_analyses (youtube_url, updated_at)")
 
 async def close_mongo_connection():
     """Ferme la connexion MongoDB."""

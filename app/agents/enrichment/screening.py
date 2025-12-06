@@ -11,9 +11,59 @@ from openai import OpenAI
 
 from ...config import get_settings
 from .common import extract_source_content, truncate_content
+from ...constants import (
+    SCREENING_TITLE_MAX_LENGTH,
+    SCREENING_SNIPPET_MAX_LENGTH,
+    SCREENING_MAX_TOKENS,
+    LLM_TEMP_RELEVANCE_SCREENING,
+    RELEVANCE_THRESHOLD_HIGH,
+    RELEVANCE_THRESHOLD_MEDIUM_MIN,
+)
+from ...prompts import JSON_OUTPUT_STRICT
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# PROMPTS
+# ============================================================================
+
+SCORE_GUIDE = """Score Guide:
+- 0.9-1.0: Directly addresses the argument with specific evidence or data
+- 0.7-0.8: Highly relevant, discusses the main topic in detail
+- 0.5-0.6: Somewhat relevant, related to the topic
+- 0.3-0.4: Tangentially related, minor relevance
+- 0.0-0.2: Not relevant to the argument"""
+
+SCREENING_INSTRUCTION = "Be strict: Only sources that DIRECTLY help fact-check this argument should score above 0.6."
+
+SCREENING_PROMPT_TEMPLATE = """You are a research relevance evaluator for fact-checking.
+
+Argument to fact-check: "{argument}"
+
+Evaluate {num_sources} sources below for relevance to this specific argument.
+
+{sources_text}
+
+For EACH source, assign a relevance score:
+
+{score_guide}
+
+{screening_instruction}
+
+{json_instruction}
+
+**RESPONSE FORMAT:**
+{{{{
+  "scores": [
+    {{{{"source_id": 1, "score": 0.85, "reason": "One brief sentence"}}}},
+    {{{{"source_id": 2, "score": 0.65, "reason": "One brief sentence"}}}},
+    ...
+  ]
+}}}}"""
+
+# ============================================================================
+# LOGIC
+# ============================================================================
 
 def _build_screening_prompt(argument: str, sources: List[Dict]) -> str:
     """
@@ -28,9 +78,9 @@ def _build_screening_prompt(argument: str, sources: List[Dict]) -> str:
     """
     sources_text = ""
     for i, source in enumerate(sources):
-        title = truncate_content(source.get('title', 'N/A'), 150)
+        title = truncate_content(source.get('title', 'N/A'), SCREENING_TITLE_MAX_LENGTH)
         content = extract_source_content(source, prefer_fulltext=False)
-        snippet = truncate_content(content, 300)
+        snippet = truncate_content(content, SCREENING_SNIPPET_MAX_LENGTH)
 
         sources_text += f"""
 Source {i+1}:
@@ -39,34 +89,14 @@ Abstract: {snippet}
 ---
 """
 
-    return f"""You are a research relevance evaluator for fact-checking.
-
-Argument to fact-check: "{argument}"
-
-Evaluate {len(sources)} sources below for relevance to this specific argument.
-
-{sources_text}
-
-For EACH source, assign a relevance score:
-
-Score Guide:
-- 0.9-1.0: Directly addresses the argument with specific evidence or data
-- 0.7-0.8: Highly relevant, discusses the main topic in detail
-- 0.5-0.6: Somewhat relevant, related to the topic
-- 0.3-0.4: Tangentially related, minor relevance
-- 0.0-0.2: Not relevant to the argument
-
-Be strict: Only sources that DIRECTLY help fact-check this argument should score above 0.6.
-
-Respond ONLY with valid JSON (no markdown, no explanations):
-{{
-  "scores": [
-    {{"source_id": 1, "score": 0.85, "reason": "One brief sentence"}},
-    {{"source_id": 2, "score": 0.65, "reason": "One brief sentence"}},
-    ...
-  ]
-}}
-"""
+    return SCREENING_PROMPT_TEMPLATE.format(
+        argument=argument,
+        num_sources=len(sources),
+        sources_text=sources_text,
+        score_guide=SCORE_GUIDE,
+        screening_instruction=SCREENING_INSTRUCTION,
+        json_instruction=JSON_OUTPUT_STRICT
+    )
 
 
 def _parse_screening_response(content: str, num_sources: int) -> Dict[int, Dict]:
@@ -237,8 +267,8 @@ def screen_sources_by_relevance(
         response = client.chat.completions.create(
             model=settings.openai_model,  # gpt-4o-mini for speed and cost
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=800,  # Allow enough for all scores
+            temperature=LLM_TEMP_RELEVANCE_SCREENING,
+            max_tokens=SCREENING_MAX_TOKENS,  # Allow enough for all scores
             response_format={"type": "json_object"}
         )
 
@@ -289,9 +319,9 @@ def get_screening_stats(sources: List[Dict]) -> Dict:
             "avg_score": 0.0,
             "min_score": 0.0,
             "max_score": 0.0,
-            "high_relevance": 0,    # >= 0.7
-            "medium_relevance": 0,  # 0.4-0.7
-            "low_relevance": 0      # < 0.4
+            "high_relevance": 0,    # >= RELEVANCE_THRESHOLD_HIGH
+            "medium_relevance": 0,  # RELEVANCE_THRESHOLD_MEDIUM_MIN to RELEVANCE_THRESHOLD_HIGH
+            "low_relevance": 0      # < RELEVANCE_THRESHOLD_MEDIUM_MIN
         }
 
     scores = [s.get("relevance_score", 0.5) for s in sources if "relevance_score" in s]
@@ -312,7 +342,7 @@ def get_screening_stats(sources: List[Dict]) -> Dict:
         "avg_score": sum(scores) / len(scores),
         "min_score": min(scores),
         "max_score": max(scores),
-        "high_relevance": sum(1 for s in scores if s >= 0.7),
-        "medium_relevance": sum(1 for s in scores if 0.4 <= s < 0.7),
-        "low_relevance": sum(1 for s in scores if s < 0.4)
+        "high_relevance": sum(1 for s in scores if s >= RELEVANCE_THRESHOLD_HIGH),
+        "medium_relevance": sum(1 for s in scores if RELEVANCE_THRESHOLD_MEDIUM_MIN <= s < RELEVANCE_THRESHOLD_HIGH),
+        "low_relevance": sum(1 for s in scores if s < RELEVANCE_THRESHOLD_MEDIUM_MIN)
     }

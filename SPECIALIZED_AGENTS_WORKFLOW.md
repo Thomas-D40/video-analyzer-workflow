@@ -154,7 +154,7 @@ The classifier recognizes these categories:
 
 ## Implementation Details
 
-### Topic Classifier (`app/agents/research/topic_classifier.py`)
+### Topic Classifier (`app/agents/orchestration/topic_classifier.py`)
 
 ```python
 # Classifies argument into 1-3 categories
@@ -174,7 +174,7 @@ strategy = get_research_strategy(argument)
 # }
 ```
 
-### Query Generator (`app/agents/research/query_generator.py`)
+### Query Generator (`app/agents/orchestration/query_generator.py`)
 
 ```python
 # Generate queries for specific agents only
@@ -229,7 +229,7 @@ To test the new workflow:
 ```bash
 # Test topic classification
 python -c "
-from app.agents.research import classify_argument_topic
+from app.agents.orchestration import classify_argument_topic
 print(classify_argument_topic('Le café augmente les risques de cancer'))
 "
 

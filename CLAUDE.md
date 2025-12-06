@@ -54,28 +54,50 @@ python test_improved_search.py
 
 ## Architecture
 
-### Agent Package Structure
+### Package Structure
 
-The agents are organized into three subpackages by role:
+The application is organized into logical layers with clear separation of concerns:
+
+#### Agents Package (`app/agents/`) - LLM-Powered Processing
+
+Agents use OpenAI's API for intelligent processing. All agents follow the **hybrid pattern** (prompts at top, constants from `app.constants`).
 
 **`app/agents/extraction/`** - Extract information from transcripts
-- `arguments.py`: Extract substantive arguments with stance detection
+- `arguments.py`: Extract substantive arguments with stance detection using GPT-4o
 
-**`app/agents/research/`** - Find external sources
-- `scientific.py`: Scientific papers from ArXiv
-- `pubmed.py`: Medical literature from PubMed/NCBI
-- `europepmc.py`: Biomedical research from Europe PMC
-- `semantic_scholar.py`: AI-powered academic search (200M+ papers)
-- `crossref.py`: Academic publication metadata via DOI
-- `core.py`: Open access papers (350M+ sources)
-- `doaj.py`: Peer-reviewed open access journals
-- `statistical.py`: Statistical data from World Bank
-- `oecd.py`: Economic indicators from OECD
-- *[Extensible: Add more domain-specific sources as needed]*
+**`app/agents/orchestration/`** - Coordinate research workflow
+- `topic_classifier.py`: Classify arguments by domain (medical, scientific, economic) using GPT-4o-mini
+- `query_generator.py`: Generate optimized search queries for different research APIs using GPT-4o-mini
+
+**`app/agents/enrichment/`** - Enhance research results
+- `screening.py`: AI-powered relevance filtering to select top sources for full-text retrieval using GPT-4o-mini
+- `fulltext.py`: Fetch and process full-text content from various sources
 
 **`app/agents/analysis/`** - Analyze and aggregate results
-- `pros_cons.py`: Extract supporting/contradicting evidence from sources
-- `aggregate.py`: Calculate reliability scores
+- `pros_cons.py`: Extract supporting/contradicting evidence from sources using GPT-4o-mini
+- `aggregate.py`: Calculate reliability scores from evidence balance using GPT-4o-mini
+
+#### Services Layer (`app/services/`) - External Integrations
+
+Services are pure API client wrappers with **no LLM usage**. They make external API calls and return structured data.
+
+**`app/services/storage.py`** - MongoDB persistence layer
+
+**`app/services/research/`** - Research database API clients
+- `scientific.py`: ArXiv API client for scientific papers (physics, CS, math)
+- `pubmed.py`: PubMed/NCBI API for medical literature
+- `europepmc.py`: Europe PMC API for biomedical research
+- `semantic_scholar.py`: Semantic Scholar API (200M+ papers, AI-powered)
+- `crossref.py`: CrossRef API for academic publication metadata via DOI
+- `core.py`: CORE API for open access papers (350M+ sources)
+- `doaj.py`: DOAJ API for peer-reviewed open access journals
+- `statistical.py`: World Bank API for development indicators
+- `oecd.py`: OECD SDMX API for economic data
+
+**Key Architectural Distinction:**
+- **Agents** = LLM-powered intelligence (OpenAI API calls)
+- **Services** = External API wrappers (no AI/LLM)
+- **Query optimization** happens in `query_generator` agent, then queries are passed to research services
 
 All agents can be imported from `app.agents` for backward compatibility:
 ```python
@@ -85,9 +107,42 @@ from app.agents import extract_arguments, search_arxiv, aggregate_results
 Or from specific subpackages for clarity:
 ```python
 from app.agents.extraction import extract_arguments
-from app.agents.research import search_arxiv
+from app.services.research import search_arxiv
 from app.agents.analysis import aggregate_results
 ```
+
+### Hybrid Prompt Pattern
+
+All LLM-based agents follow a consistent **hybrid pattern** for organization:
+
+```python
+# ============================================================================
+# PROMPTS
+# ============================================================================
+
+SYSTEM_PROMPT = """..."""  # Prompts as module constants
+USER_PROMPT_TEMPLATE = """..."""
+
+# ============================================================================
+# LOGIC
+# ============================================================================
+
+def agent_function(...):
+    # Implementation using prompts from above
+```
+
+**Benefits:**
+- Prompts clearly visible at top of file
+- Configuration values centralized in `app.constants`
+- Tight coupling maintained (prompts stay with parsing logic)
+- Easy to modify prompts without touching complex logic
+
+**Reference implementations:**
+- `app/agents/extraction/arguments.py` - Multi-language prompts
+- `app/agents/analysis/pros_cons.py` - Uses shared prompt components
+- `app/agents/orchestration/query_generator.py` - Class-based pattern
+
+See `PROMPT_REFACTORING_GUIDE.md` for detailed pattern documentation.
 
 ### Agent-Based Workflow (app/core/workflow.py)
 
@@ -111,17 +166,19 @@ The `process_video()` function orchestrates a multi-stage pipeline:
    - Returns arguments with stance (affirmatif/conditionnel)
    - Truncates transcripts to 25,000 chars to save tokens
 
-5. **Topic Classification & Agent Selection** (`app/agents/orchestration/`)
+5. **Topic Classification & Query Generation** (`app/agents/orchestration/`)
    - Classifies argument domain (medical, scientific, economic, etc.)
-   - Selects appropriate research agents based on topic
-   - Generates optimized queries for each selected agent
+   - Selects appropriate research services based on topic
+   - Generates optimized queries for each selected service using GPT-4o-mini
+   - Passes optimized queries to research services (no LLM calls in services)
 
 6. **Multi-Source Research** (parallel execution via `app/core/parallel_research.py`)
-   - **Medical**: PubMed, Europe PMC
-   - **Scientific**: ArXiv, Semantic Scholar, CrossRef, CORE, DOAJ
-   - **Statistical**: World Bank, OECD
-   - All agents return standardized results with access type metadata
-   - Relevance filtering keeps top sources per argument
+   - Queries research services from `app/services/research/` using pre-generated queries
+   - **Medical**: PubMed, Europe PMC (API clients, no LLM)
+   - **Scientific**: ArXiv, Semantic Scholar, CrossRef, CORE, DOAJ (API clients, no LLM)
+   - **Statistical**: World Bank, OECD (API clients, no LLM)
+   - All services return standardized results with access type metadata
+   - Relevance filtering via `screening.py` agent (uses LLM) keeps top sources per argument
 
 7. **Pros/Cons Analysis** (`app/agents/analysis/pros_cons.py`)
    - OpenAI GPT-4o-mini analyzes sources

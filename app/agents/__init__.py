@@ -11,13 +11,17 @@ Ce package contient tous les agents organises en cinq categories:
 """
 # Import everything from subpackages for backward compatibility
 from .extraction import extract_arguments
-from .research import (
+# Import from services for backward compatibility
+from ..services.research import (
     search_arxiv,
     search_world_bank_data,
     search_pubmed,
     search_semantic_scholar,
     search_crossref,
     search_oecd_data,
+    search_core,
+    search_doaj,
+    search_europepmc,
 )
 from .orchestration import (
     generate_search_queries,
@@ -48,6 +52,9 @@ __all__ = [
     "search_semantic_scholar",
     "search_crossref",
     "search_oecd_data",
+    "search_core",
+    "search_doaj",
+    "search_europepmc",
     # Enrichment
     "screen_sources_by_relevance",
     "get_screening_stats",

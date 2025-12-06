@@ -7,9 +7,12 @@ The video analyzer uses a multi-agent architecture organized into four main cate
 ```
 app/agents/
 ├── extraction/      # Extract information from video transcripts
-├── research/        # Fetch data from external sources
+├── enrichment/      # Enhance search results with AI screening
 ├── orchestration/   # Coordinate and optimize agent selection
 └── analysis/        # Analyze and aggregate results
+
+app/services/
+└── research/        # Pure data fetchers for external sources
 ```
 
 ## 1. Extraction Agents
@@ -25,12 +28,14 @@ Extract structured information from video transcripts.
   - Filters out opinions, metaphors, and trivial statements
   - Returns arguments with stance detection (affirmative/conditional)
 
-## 2. Research Agents
+## 2. Research Services
 
-**Location**: `app/agents/research/`
+**Location**: `app/services/research/`
 
 ### Purpose
-Pure data fetchers that retrieve information from external APIs. Each agent specializes in a specific domain.
+Pure data fetchers that retrieve information from external APIs. Each service specializes in a specific domain.
+
+**Note**: For backward compatibility, all research services can also be imported from `app.agents`.
 
 ### Agents
 
@@ -287,7 +292,7 @@ def fetch_data():
    - Rationale: Each video analyzed once, no reuse
    - Benefit: Simpler codebase
 
-2. **Web Search** (`app/agents/research/web.py`)
+2. **Web Search** (previously at `app/agents/research/web.py`, now removed)
    - Rationale: Low-quality results
    - Benefit: Higher quality analysis
 
@@ -300,7 +305,7 @@ def fetch_data():
 ### Unit Tests
 ```python
 # Test OECD agent
-from app.agents.research import search_oecd_data
+from app.services.research import search_oecd_data
 results = search_oecd_data("GDP growth France")
 assert len(results) > 0
 assert results[0]["source"] == "OECD"
@@ -323,14 +328,15 @@ assert len(result["arguments"]) > 0
 
 ## Best Practices
 
-### Adding New Research Agent
+### Adding New Research Service
 
-1. Create file in `app/agents/research/`
+1. Create file in `app/services/research/`
 2. Implement function `search_X(query, max_results) -> List[Dict]`
 3. Return format: `[{title, url, snippet, source, ...}]`
-4. Add to `app/agents/research/__init__.py`
-5. Add to topic classifier categories
-6. Add to query generator prompts
+4. Add to `app/services/research/__init__.py`
+5. Add to `app/agents/__init__.py` for backward compatibility
+6. Add to topic classifier categories
+7. Add to query generator prompts
 
 ### Adding New Domain
 

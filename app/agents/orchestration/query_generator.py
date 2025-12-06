@@ -15,8 +15,89 @@ from openai import OpenAI
 
 from ...config import get_settings
 from ...utils.api_helpers import retry_with_backoff, TransientAPIError
+from ...constants import (
+    LLM_TEMP_QUERY_GENERATION,
+    QUERY_GENERATOR_MAX_RETRY_ATTEMPTS,
+    QUERY_GENERATOR_BASE_DELAY,
+    QUERY_GEN_MIN_WORD_LENGTH,
+    QUERY_GEN_MAX_KEYWORDS,
+)
+from ...prompts import JSON_OUTPUT_STRICT
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# PROMPTS
+# ============================================================================
+
+SYSTEM_PROMPT = "You are a precise research query optimizer that responds in JSON format."
+
+USER_PROMPT_TEMPLATE = """You are an expert in academic and statistical information retrieval.
+Your task is to generate HIGHLY OPTIMIZED search queries for different databases and APIs.
+
+Argument to research: "{argument}"
+Detected language: {language}
+
+Generate search queries for these sources:
+{agent_instructions}
+
+**CRITICAL REQUIREMENTS:**
+
+1. OECD queries:
+   - Use standard indicator names: "GDP", "unemployment rate", "inflation", "education spending"
+   - Keep it simple and direct (2-4 words max)
+   - Match official OECD terminology
+   - Examples: "GDP growth", "unemployment rate", "health expenditure"
+
+2. World Bank queries:
+   - Use development/economic indicator terms
+   - Keep concise (2-4 keywords)
+   - Examples: "poverty rate", "life expectancy", "GDP per capita"
+
+3. PubMed queries:
+   - Medical/health topics ONLY
+   - Use proper medical terminology
+   - If not medical, return empty string ""
+
+4. ArXiv queries:
+   - Scientific/technical topics ONLY (physics, CS, math)
+   - Use academic terminology
+   - If not scientific, return empty string ""
+
+5. Semantic Scholar / CrossRef:
+   - Can handle any academic topic
+   - Be comprehensive but focused
+   - Include key concepts and related terms
+
+Also provide fallback queries (alternatives if primary query fails) for each agent.
+
+{json_instruction}
+
+**EXAMPLE OUTPUT FORMAT:**
+{{{{
+    "pubmed": {{{{
+        "query": "coffee cancer risk epidemiology",
+        "fallback": ["coffee health effects", "caffeine cancer"],
+        "confidence": 0.85
+    }}}},
+    "oecd": {{{{
+        "query": "GDP growth",
+        "fallback": ["economic growth", "national accounts"],
+        "confidence": 0.90
+    }}}},
+    "world_bank": {{{{
+        "query": "GDP growth rate",
+        "fallback": ["economic growth"],
+        "confidence": 0.90
+    }}}}
+}}}}
+
+Set confidence between 0.0 and 1.0 based on query quality.
+If a source is not relevant, use empty string "" for query and empty array for fallback."""
+
+# ============================================================================
+# CLASS DEFINITION
+# ============================================================================
 
 
 class QueryGenerator:
@@ -101,70 +182,17 @@ class QueryGenerator:
                     f'  - Example: "{req["example"]}"'
                 )
 
-        prompt = f"""You are an expert in academic and statistical information retrieval.
-Your task is to generate HIGHLY OPTIMIZED search queries for different databases and APIs.
+        return USER_PROMPT_TEMPLATE.format(
+            argument=argument,
+            language=language,
+            agent_instructions=''.join(agent_instructions),
+            json_instruction=JSON_OUTPUT_STRICT
+        )
 
-Argument to research: "{argument}"
-Detected language: {language}
-
-Generate search queries for these sources:
-{''.join(agent_instructions)}
-
-CRITICAL REQUIREMENTS:
-
-1. OECD queries:
-   - Use standard indicator names: "GDP", "unemployment rate", "inflation", "education spending"
-   - Keep it simple and direct (2-4 words max)
-   - Match official OECD terminology
-   - Examples: "GDP growth", "unemployment rate", "health expenditure"
-
-2. World Bank queries:
-   - Use development/economic indicator terms
-   - Keep concise (2-4 keywords)
-   - Examples: "poverty rate", "life expectancy", "GDP per capita"
-
-3. PubMed queries:
-   - Medical/health topics ONLY
-   - Use proper medical terminology
-   - If not medical, return empty string ""
-
-4. ArXiv queries:
-   - Scientific/technical topics ONLY (physics, CS, math)
-   - Use academic terminology
-   - If not scientific, return empty string ""
-
-5. Semantic Scholar / CrossRef:
-   - Can handle any academic topic
-   - Be comprehensive but focused
-   - Include key concepts and related terms
-
-Also provide fallback queries (alternatives if primary query fails) for each agent.
-
-Example output format:
-{{
-    "pubmed": {{
-        "query": "coffee cancer risk epidemiology",
-        "fallback": ["coffee health effects", "caffeine cancer"],
-        "confidence": 0.85
-    }},
-    "oecd": {{
-        "query": "GDP growth",
-        "fallback": ["economic growth", "national accounts"],
-        "confidence": 0.90
-    }},
-    "world_bank": {{
-        "query": "GDP growth rate",
-        "fallback": ["economic growth"],
-        "confidence": 0.90
-    }}
-}}
-
-Respond ONLY with valid JSON. Set confidence between 0.0 and 1.0 based on query quality.
-If a source is not relevant, use empty string "" for query and empty array for fallback.
-"""
-        return prompt
-
-    @retry_with_backoff(max_attempts=2, base_delay=1.0)
+    @retry_with_backoff(
+        max_attempts=QUERY_GENERATOR_MAX_RETRY_ATTEMPTS,
+        base_delay=QUERY_GENERATOR_BASE_DELAY
+    )
     def _call_llm(self, prompt: str) -> Dict[str, Any]:
         """
         Call LLM to generate queries.
@@ -185,11 +213,11 @@ If a source is not relevant, use empty string "" for query and empty array for f
             response = self.client.chat.completions.create(
                 model=self.settings.openai_model,
                 messages=[
-                    {"role": "system", "content": "You are a precise research query optimizer that responds in JSON format."},
+                    {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.3
+                temperature=LLM_TEMP_QUERY_GENERATION
             )
 
             content = response.choices[0].message.content
@@ -218,7 +246,7 @@ If a source is not relevant, use empty string "" for query and empty array for f
         """
         # Extract main keywords (simple approach)
         words = argument.lower().split()
-        keywords = [w for w in words if len(w) > 3][:5]
+        keywords = [w for w in words if len(w) > QUERY_GEN_MIN_WORD_LENGTH][:QUERY_GEN_MAX_KEYWORDS]
         simple_query = " ".join(keywords)
 
         queries = {}

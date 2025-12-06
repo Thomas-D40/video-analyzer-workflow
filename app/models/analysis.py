@@ -1,31 +1,23 @@
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 
 from app.constants import AnalysisMode, AnalysisStatus, RATING_MIN, RATING_MAX
 
-class VideoAnalysis(BaseModel):
-    """
-    Modèle de données pour stocker une analyse de vidéo.
 
-    Note: Analyses are stored with a composite key (video_id, analysis_mode)
-    to allow multiple analysis modes for the same video.
+class AnalysisData(BaseModel):
     """
-    id: str = Field(..., description="ID de la vidéo YouTube")
-    youtube_url: str = Field(..., description="URL de la vidéo")
+    Analysis data for a specific mode.
+
+    Stores the status, timestamps, and content for a single analysis mode.
+    This is the nested structure within VideoAnalysis.analyses map.
+    """
+    status: AnalysisStatus = Field(default=AnalysisStatus.PENDING)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    status: AnalysisStatus = Field(
-        default=AnalysisStatus.COMPLETED,
-        description="Statut de l'analyse"
-    )
-    analysis_mode: AnalysisMode = Field(
-        default=AnalysisMode.SIMPLE,
-        description="Mode d'analyse"
-    )
-    content: Dict[str, Any] = Field(..., description="Contenu complet de l'analyse (JSON)")
+    content: Optional[Dict[str, Any]] = Field(default=None)
 
-    # User rating system
+    # User rating system for this specific analysis
     average_rating: float = Field(
         default=0.0,
         description=f"Note moyenne des utilisateurs ({RATING_MIN}-{RATING_MAX})",
@@ -44,12 +36,126 @@ class VideoAnalysis(BaseModel):
     )
 
     class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            AnalysisStatus: lambda v: v.value,
+        }
+
+
+class VideoAnalysis(BaseModel):
+    """
+    Complete video document with all analysis modes.
+
+    New structure: One document per video with nested analyses map.
+
+    Schema:
+    {
+        "_id": "video_id_here",
+        "youtube_url": "https://...",
+        "created_at": "2025-12-06T10:00:00",
+        "updated_at": "2025-12-06T11:00:00",
+        "analyses": {
+            "simple": {
+                "status": "completed",
+                "created_at": "2025-12-06T10:00:00",
+                "updated_at": "2025-12-06T10:00:00",
+                "content": { ... },
+                "average_rating": 4.5,
+                "rating_count": 10,
+                "ratings_sum": 45.0
+            },
+            "medium": { ... },
+            "hard": null
+        }
+    }
+    """
+    id: str = Field(alias="_id", description="YouTube video ID")
+    youtube_url: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    analyses: Dict[str, Optional[AnalysisData]] = Field(default_factory=dict)
+
+    class Config:
         populate_by_name = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            AnalysisMode: lambda v: v.value,
+            AnalysisStatus: lambda v: v.value,
+        }
         json_schema_extra = {
             "example": {
-                "id": "dQw4w9WgXcQ",
+                "_id": "dQw4w9WgXcQ",
                 "youtube_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                "status": "completed",
-                "content": {"arguments": []}
+                "created_at": "2025-12-06T10:00:00Z",
+                "updated_at": "2025-12-06T10:00:00Z",
+                "analyses": {
+                    "simple": {
+                        "status": "completed",
+                        "created_at": "2025-12-06T10:00:00Z",
+                        "updated_at": "2025-12-06T10:00:00Z",
+                        "content": {"arguments": []},
+                        "average_rating": 0.0,
+                        "rating_count": 0,
+                        "ratings_sum": 0.0
+                    }
+                }
             }
         }
+
+    def get_analysis(self, mode: AnalysisMode) -> Optional[AnalysisData]:
+        """Get analysis for specific mode."""
+        return self.analyses.get(mode.value)
+
+    def set_analysis(self, mode: AnalysisMode, data: AnalysisData) -> None:
+        """Set analysis for specific mode."""
+        self.analyses[mode.value] = data
+        self.updated_at = datetime.utcnow()
+
+    def get_available_modes(self) -> List[AnalysisMode]:
+        """Get list of completed analysis modes."""
+        available = []
+        for mode_str, analysis in self.analyses.items():
+            if analysis and analysis.status == AnalysisStatus.COMPLETED:
+                try:
+                    available.append(AnalysisMode(mode_str))
+                except ValueError:
+                    continue
+        return available
+
+    @classmethod
+    def from_legacy_format(cls, legacy_doc: Dict) -> "VideoAnalysis":
+        """
+        Convert legacy flat format to new nested format.
+
+        Legacy format:
+        {
+            "id": "video_id",
+            "youtube_url": "...",
+            "analysis_mode": "simple",
+            "status": "completed",
+            "content": {...},
+            "average_rating": 4.5,
+            ...
+        }
+
+        New format: VideoAnalysis with nested analyses map.
+        """
+        mode = legacy_doc.get("analysis_mode", "simple")
+
+        analysis_data = AnalysisData(
+            status=AnalysisStatus(legacy_doc.get("status", "completed")),
+            created_at=legacy_doc.get("created_at", datetime.utcnow()),
+            updated_at=legacy_doc.get("updated_at", datetime.utcnow()),
+            content=legacy_doc.get("content"),
+            average_rating=legacy_doc.get("average_rating", 0.0),
+            rating_count=legacy_doc.get("rating_count", 0),
+            ratings_sum=legacy_doc.get("ratings_sum", 0.0)
+        )
+
+        return cls(
+            id=legacy_doc["id"],
+            youtube_url=legacy_doc["youtube_url"],
+            created_at=legacy_doc.get("created_at", datetime.utcnow()),
+            updated_at=legacy_doc.get("updated_at", datetime.utcnow()),
+            analyses={mode: analysis_data}
+        )

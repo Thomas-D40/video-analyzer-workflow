@@ -3,6 +3,54 @@ import json
 import hashlib
 from openai import OpenAI
 from ...config import get_settings
+from ...constants import (
+    PROS_CONS_MAX_CONTENT_LENGTH,
+    PROS_CONS_MIN_PARTIAL_CONTENT,
+    LLM_TEMP_PROS_CONS_ANALYSIS,
+)
+from ...prompts import (
+    JSON_OUTPUT_STRICT,
+    CITATION_INSTRUCTION,
+)
+
+# ============================================================================
+# PROMPTS
+# ============================================================================
+
+SYSTEM_PROMPT = f"""You are an expert in scientific analysis and argument critique.
+Analyze scientific articles to identify points that support (pros) or contradict (cons) an argument.
+
+**STRICT VERIFICATION RULES:**
+1.  **Explicit Evidence Required**: Each point ("claim") MUST be explicitly supported by the text of a provided article.
+2.  **No Invention**: If no article mentions a point, DO NOT INVENT IT.
+3.  **Citation Required**: Each claim must be associated with the exact URL of the article containing it.
+4.  **Relevance**: Only retain points directly related to the analyzed argument.
+5.  **Access Level**: Abstracts and summaries are VALID sources - do not dismiss sources for lacking full text access.
+
+For each article, identify:
+- Claims that SUPPORT the argument (pros)
+- Claims that CONTRADICT or QUESTION the argument (cons)
+
+{JSON_OUTPUT_STRICT}
+
+**RESPONSE FORMAT:**
+{{
+    "pros": [{{"claim": "point description (with implicit citation)", "source": "article URL"}}],
+    "cons": [{{"claim": "point description (with implicit citation)", "source": "article URL"}}]
+}}
+
+If no article contains relevant information, return empty lists."""
+
+USER_PROMPT_TEMPLATE = """Argument to analyze: {argument}
+
+Scientific articles:
+{articles_context}
+
+Analyze these articles and extract supporting (pros) and contradicting (cons) points for this argument."""
+
+# ============================================================================
+# LOGIC
+# ============================================================================
 
 def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = "") -> Dict[str, List[Dict]]:
     """
@@ -42,7 +90,6 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
     # Format articles context (use fulltext if available, otherwise snippet/abstract)
     articles_context = ""
     current_length = 0
-    max_length = 40000  # Increased to accommodate full texts
 
     fulltext_count = 0
     abstract_count = 0
@@ -64,10 +111,10 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
 
         article_text = f"Article: {article.get('title', '')}\nURL: {article.get('url', '')}\n{content_type}: {content}\n\n"
 
-        if current_length + len(article_text) > max_length:
+        if current_length + len(article_text) > PROS_CONS_MAX_CONTENT_LENGTH:
             # Still include at least partial content
-            remaining_space = max_length - current_length
-            if remaining_space > 500:  # Only include if we have meaningful space left
+            remaining_space = PROS_CONS_MAX_CONTENT_LENGTH - current_length
+            if remaining_space > PROS_CONS_MIN_PARTIAL_CONTENT:
                 article_text = f"Article: {article.get('title', '')}\nURL: {article.get('url', '')}\n{content_type}: {content[:remaining_space]}\n\n"
                 articles_context += article_text
             break
@@ -80,50 +127,25 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
     if len(articles) > 0 and not articles_context:
          # Fallback if the first article is too long
          first_content = articles[0].get('fulltext') or articles[0].get('snippet', '')
-         articles_context = f"Article: {articles[0].get('title', '')}\nURL: {articles[0].get('url', '')}\nContent: {first_content[:max_length]}\n\n"
+         articles_context = f"Article: {articles[0].get('title', '')}\nURL: {articles[0].get('url', '')}\nContent: {first_content[:PROS_CONS_MAX_CONTENT_LENGTH]}\n\n"
 
     client = OpenAI(api_key=settings.openai_api_key)
 
-    # Optimized prompt (shorter thanks to MCP summaries)
-    system_prompt = """You are an expert in scientific analysis and argument critique.
-Analyze scientific articles to identify points that support (pros) or contradict (cons) an argument.
-
-**STRICT VERIFICATION RULES:**
-1.  **Explicit Evidence Required**: Each point ("claim") MUST be explicitly supported by the text of a provided article.
-2.  **No Invention**: If no article mentions a point, DO NOT INVENT IT.
-3.  **Citation Required**: Each claim must be associated with the exact URL of the article containing it.
-4.  **Relevance**: Only retain points directly related to the analyzed argument.
-5.  **Access Level**: Abstracts and summaries are VALID sources - do not dismiss sources for lacking full text access.
-
-For each article, identify:
-- Claims that SUPPORT the argument (pros)
-- Claims that CONTRADICT or QUESTION the argument (cons)
-
-Respond in JSON with this exact format:
-{
-    "pros": [{"claim": "point description (with implicit citation)", "source": "article URL"}],
-    "cons": [{"claim": "point description (with implicit citation)", "source": "article URL"}]
-}
-
-If no article contains relevant information, return empty lists."""
-
-
-    user_prompt = f"""Argument to analyze: {argument}
-
-Scientific articles:
-{articles_context}
-
-Analyze these articles and extract supporting (pros) and contradicting (cons) points for this argument."""
+    # Build prompts from constants
+    user_prompt = USER_PROMPT_TEMPLATE.format(
+        argument=argument,
+        articles_context=articles_context
+    )
 
 
     try:
         response = client.chat.completions.create(
-            model=settings.openai_smart_model,
+            model=settings.openai_model,  # Use fast model for analysis
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.3,
+            temperature=LLM_TEMP_PROS_CONS_ANALYSIS,
             response_format={"type": "json_object"}
         )
 

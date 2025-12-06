@@ -24,7 +24,10 @@
       "Bash(tree:*)",
       "Bash(python -c:*)",
       "WebFetch(domain:github.com)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(PYTHONPATH=/mnt/e/Développement/video-analyzer-workflow python3:*)"
     ],
     "deny": [],
     "ask": []

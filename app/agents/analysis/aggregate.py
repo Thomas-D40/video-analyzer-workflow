@@ -13,6 +13,67 @@ from typing import List, Dict
 import json
 from openai import OpenAI
 from ...config import get_settings
+from ...constants import (
+    AGGREGATE_MAX_PROS_PER_ARG,
+    AGGREGATE_MAX_CONS_PER_ARG,
+    AGGREGATE_MAX_CLAIM_LENGTH,
+    AGGREGATE_MAX_ARGUMENT_LENGTH,
+    AGGREGATE_MAX_ITEMS_TEXT_LENGTH,
+    LLM_TEMP_RELIABILITY_AGGREGATION,
+    RELIABILITY_BASE_SCORE,
+    RELIABILITY_PER_SOURCE_INCREMENT,
+    RELIABILITY_MAX_FALLBACK,
+    RELIABILITY_NO_SOURCES,
+)
+from ...prompts import JSON_OUTPUT_STRICT
+
+# ============================================================================
+# PROMPTS
+# ============================================================================
+
+SYSTEM_PROMPT = f"""You are an expert in evaluating the reliability of scientific arguments.
+Aggregate analysis results and calculate a reliability score (0.0-1.0) for each argument.
+
+**SCORING CRITERIA:**
+- 0.0-0.3: Very low (few sources, major contradictions)
+- 0.4-0.6: Average (some sources, partial consensus)
+- 0.7-0.8: Good (several reliable sources, relative consensus)
+- 0.9-1.0: Very high (numerous scientific sources, strong consensus)
+
+**FACTORS TO CONSIDER:**
+- Number of sources
+- Consensus among sources
+- Quality (scientific > general)
+- Argument tone (affirmative vs conditional)
+- Balance between pros and cons
+
+**IMPORTANT:** Abstract-only sources (without full text access) are still VALUABLE and RELIABLE for fact-checking.
+Do NOT penalize sources for being abstract-only or requiring subscription. Evaluate based on content quality, not access level.
+
+{JSON_OUTPUT_STRICT}
+
+**RESPONSE FORMAT:**
+{{
+  "arguments": [
+    {{
+      "argument": "...",
+      "pros": [{{"claim": "...", "source": "..."}}],
+      "cons": [{{"claim": "...", "source": "..."}}],
+      "reliability": 0.75,
+      "stance": "affirmatif" or "conditionnel"
+    }}
+  ]
+}}"""
+
+USER_PROMPT_TEMPLATE = """Aggregate the following results and calculate reliability scores:
+
+{items_text}
+
+Return only JSON, no additional text."""
+
+# ============================================================================
+# LOGIC
+# ============================================================================
 
 def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
     """
@@ -61,13 +122,13 @@ def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
     items_context = []
     for item in items:
         # Limit number of pros/cons per argument
-        pros = item.get("pros", [])[:5]  # Max 5 pros
-        cons = item.get("cons", [])[:5]  # Max 5 cons
+        pros = item.get("pros", [])[:AGGREGATE_MAX_PROS_PER_ARG]
+        cons = item.get("cons", [])[:AGGREGATE_MAX_CONS_PER_ARG]
 
         # Limit length of each claim
         optimized_pros = []
         for pro in pros:
-            claim = pro.get("claim", "")[:200]  # Max 200 characters per claim
+            claim = pro.get("claim", "")[:AGGREGATE_MAX_CLAIM_LENGTH]
             optimized_pros.append({
                 "claim": claim,
                 "source": pro.get("source", "")
@@ -75,14 +136,14 @@ def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
 
         optimized_cons = []
         for con in cons:
-            claim = con.get("claim", "")[:200]  # Max 200 characters per claim
+            claim = con.get("claim", "")[:AGGREGATE_MAX_CLAIM_LENGTH]
             optimized_cons.append({
                 "claim": claim,
                 "source": con.get("source", "")
             })
 
         items_context.append({
-            "argument": item.get("argument", "")[:300],  # Max 300 characters for argument
+            "argument": item.get("argument", "")[:AGGREGATE_MAX_ARGUMENT_LENGTH],
             "pros": optimized_pros,
             "cons": optimized_cons,
             "stance": item.get("stance", "affirmatif")
@@ -91,51 +152,20 @@ def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
     # Build text for prompt (compact format)
     items_text = json.dumps(items_context, ensure_ascii=False, separators=(',', ':'))
 
-    # Optimized prompt (shorter)
-    system_prompt = """You are an expert in evaluating the reliability of scientific arguments.
-Aggregate analysis results and calculate a reliability score (0.0-1.0) for each argument.
+    # Truncate items text to max length
+    truncated_items = items_text[:AGGREGATE_MAX_ITEMS_TEXT_LENGTH]
 
-Scoring criteria:
-- 0.0-0.3: Very low (few sources, major contradictions)
-- 0.4-0.6: Average (some sources, partial consensus)
-- 0.7-0.8: Good (several reliable sources, relative consensus)
-- 0.9-1.0: Very high (numerous scientific sources, strong consensus)
-
-Factors: number of sources, consensus, quality (scientific > general), tone, pros/cons balance.
-
-IMPORTANT: Abstract-only sources (without full text access) are still VALUABLE and RELIABLE for fact-checking.
-Do NOT penalize sources for being abstract-only or requiring subscription. Evaluate based on content quality, not access level.
-
-JSON format:
-{
-  "arguments": [
-    {
-      "argument": "...",
-      "pros": [{"claim": "...", "source": "..."}],
-      "cons": [{"claim": "...", "source": "..."}],
-      "reliability": 0.75,
-      "stance": "affirmatif" or "conditionnel"
-    }
-  ]
-}"""
-
-    # Limit to 10000 characters (reduced from 15000 thanks to optimization)
-    truncated_items = items_text[:10000]
-
-    user_prompt = f"""Aggregate the following results and calculate reliability scores:
-
-{truncated_items}
-
-Return only JSON, no additional text."""
+    # Build prompt from template
+    user_prompt = USER_PROMPT_TEMPLATE.format(items_text=truncated_items)
 
     try:
         response = client.chat.completions.create(
-            model=settings.openai_smart_model,
+            model=settings.openai_model,  # Use fast model for aggregation
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.2,  # Very low temperature for more consistent scores
+            temperature=LLM_TEMP_RELIABILITY_AGGREGATION,
             response_format={"type": "json_object"}
         )
 
@@ -187,12 +217,14 @@ Return only JSON, no additional text."""
                 num_statistical = len(sources.get("statistical", []))
                 num_sources = num_medical + num_scientific + num_statistical
 
-                # If no sources, reliability = 0.0 to indicate absence of sources
+                # Calculate reliability based on number of sources
                 if num_sources == 0:
-                    reliability = 0.0
+                    reliability = RELIABILITY_NO_SOURCES
                 else:
-                    # Base 0.3 + 0.1 per source, max 0.9
-                    reliability = min(0.9, 0.3 + (num_sources * 0.1))
+                    reliability = min(
+                        RELIABILITY_MAX_FALLBACK,
+                        RELIABILITY_BASE_SCORE + (num_sources * RELIABILITY_PER_SOURCE_INCREMENT)
+                    )
 
                 validated_arguments.append({
                     "argument": item.get("argument", ""),
@@ -231,12 +263,14 @@ def _fallback_aggregation(items: List[Dict]) -> Dict:
         num_statistical = len(sources.get("statistical", []))
         num_sources = num_medical + num_scientific + num_statistical
 
-        # If no sources, reliability = 0.0 to indicate absence of sources
+        # Calculate reliability based on number of sources
         if num_sources == 0:
-            reliability = 0.0
+            reliability = RELIABILITY_NO_SOURCES
         else:
-            # Basic reliability: base 0.3 + 0.1 per source, maximum 0.9
-            reliability = min(0.9, 0.3 + (num_sources * 0.1))
+            reliability = min(
+                RELIABILITY_MAX_FALLBACK,
+                RELIABILITY_BASE_SCORE + (num_sources * RELIABILITY_PER_SOURCE_INCREMENT)
+            )
 
         arguments.append({
             "argument": item.get("argument", ""),

@@ -8,7 +8,7 @@ import asyncio
 from typing import Dict, List, Any
 from concurrent.futures import ThreadPoolExecutor
 
-from app.agents.research import (
+from app.services.research import (
     search_arxiv,
     search_world_bank_data,
     search_pubmed,

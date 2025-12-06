@@ -6,7 +6,34 @@ to enable bilingual support (French/English).
 """
 from openai import OpenAI
 from ..config import get_settings
+from ..constants import LANGUAGE_MAP_DETECTION
 import json
+
+def build_prompt_language_detection(sample: str) -> str:
+    """
+    Build dynamic language detection prompt based on available languages.
+
+    Args:
+        sample: Text sample to analyze
+
+    Returns:
+        Formatted prompt string with language hints
+    """
+    lang_hint = ", ".join([f"\"{code}\" for {name}" for code, name in LANGUAGE_MAP_DETECTION.items()])
+    valid_codes = "\" or \"".join(LANGUAGE_MAP_DETECTION.keys())
+
+    return f"""Detect the language of the following text.
+Respond ONLY with a JSON object containing the language code.
+
+Text sample:
+\"\"\"{sample}\"\"\"
+
+Respond ONLY in JSON format:
+{{
+    "language": "{valid_codes}"
+}}
+
+Use {lang_hint}."""
 
 
 def detect_language(text: str) -> str:
@@ -30,19 +57,8 @@ def detect_language(text: str) -> str:
 
     client = OpenAI(api_key=settings.openai_api_key)
 
-    prompt = f"""Detect the language of the following text.
-Respond ONLY with a JSON object containing the language code.
-
-Text sample:
-\"\"\"{sample}\"\"\"
-
-Respond ONLY in JSON format:
-{{
-    "language": "fr" or "en"
-}}
-
-Use "fr" for French, "en" for English.
-"""
+    # Use dynamic prompt builder with available languages
+    prompt = build_prompt_language_detection(sample)
 
     try:
         response = client.chat.completions.create(
@@ -60,7 +76,7 @@ Use "fr" for French, "en" for English.
         language = data.get("language", "en")
 
         # Validate language code
-        if language not in ["fr", "en"]:
+        if language not in LANGUAGE_MAP_DETECTION.keys():
             print(f"[WARN language_detector] Invalid language code '{language}', defaulting to 'en'")
             language = "en"
 
