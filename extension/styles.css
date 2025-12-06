@@ -1032,3 +1032,122 @@ h1 {
 .btn-icon {
     margin-right: 8px;
 }
+
+/* Analysis Status Panel */
+.analysis-status {
+    padding: 16px 24px;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.status-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+#statusIcon {
+    font-size: 18px;
+}
+
+.status-metadata {
+    font-size: 13px;
+    color: #718096;
+    line-height: 1.5;
+}
+
+.status-metadata-item {
+    display: inline-block;
+    margin-right: 12px;
+}
+
+.status-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-toggle {
+    flex: 1;
+    padding: 10px 16px;
+    background: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-toggle:hover {
+    background: #2c5282;
+}
+
+.toggle-icon {
+    transition: transform 0.3s ease;
+    display: inline-block;
+}
+
+.btn-toggle.expanded .toggle-icon {
+    transform: rotate(180deg);
+}
+
+.btn-secondary {
+    padding: 10px 16px;
+    background: #edf2f7;
+    color: #4a5568;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: #e2e8f0;
+    color: #2d3748;
+}
+
+/* Collapsible Results */
+.results.collapsed {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.4s ease, opacity 0.3s ease;
+}
+
+.results:not(.collapsed) {
+    max-height: 100vh;
+    opacity: 1;
+    transition: max-height 0.4s ease, opacity 0.3s ease;
+}
+
+/* Arguments List Scrollable */
+.arguments-list {
+    padding: 16px 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.arg-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}

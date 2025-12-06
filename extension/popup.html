@@ -17,6 +17,26 @@
 
         <div id="status" class="status hidden"></div>
 
+        <!-- Analysis Status Panel -->
+        <div id="analysisStatus" class="analysis-status hidden">
+            <div class="status-panel">
+                <div class="status-badge">
+                    <span id="statusIcon">✓</span>
+                    <span id="statusText">Analyse disponible</span>
+                </div>
+                <div id="statusMetadata" class="status-metadata">
+                    <!-- Filled by JS: date, mode, arg count -->
+                </div>
+                <div class="status-actions">
+                    <button id="toggleResultsBtn" class="btn-toggle">
+                        <span class="toggle-icon">▼</span>
+                        <span class="toggle-text">Voir l'analyse</span>
+                    </button>
+                    <button id="reAnalyzeBtn" class="btn-secondary" title="Nouvelle analyse">🔄</button>
+                </div>
+            </div>
+        </div>
+
         <!-- API Key Setup Screen -->
         <div id="apiKeySetup" class="api-key-setup hidden">
             <div class="setup-content">
@@ -54,11 +74,10 @@
             <p class="loading-detail">Cela peut prendre 30-60 secondes</p>
         </div>
 
-        <div id="results" class="results hidden">
+        <div id="results" class="results hidden collapsed">
             <div class="results-header">
                 <h2>📊 Résultats</h2>
                 <div class="header-actions">
-                    <button id="newAnalysisBtn" class="btn-text" title="Nouvelle analyse">🔄</button>
                     <button id="copyBtn" class="btn-text" title="Copier le rapport">📋</button>
                 </div>
             </div>

@@ -26,7 +26,6 @@ console.log(`[Popup Config] Environment: ${ENV}, API URL: ${API_URL}`);
 
 // Éléments DOM
 const analyzeBtn = document.getElementById('analyzeBtn');
-const newAnalysisBtn = document.getElementById('newAnalysisBtn');
 const loadingDiv = document.getElementById('loading');
 const resultsDiv = document.getElementById('results');
 const errorDiv = document.getElementById('error');
@@ -35,9 +34,64 @@ const videoSummary = document.getElementById('videoSummary');
 const argumentsList = document.getElementById('argumentsList');
 const copyBtn = document.getElementById('copyBtn');
 const rawReport = document.getElementById('rawReport');
+const analysisStatusDiv = document.getElementById('analysisStatus');
+const statusMetadataDiv = document.getElementById('statusMetadata');
+const toggleResultsBtn = document.getElementById('toggleResultsBtn');
+const reAnalyzeBtn = document.getElementById('reAnalyzeBtn');
+const statusIcon = document.getElementById('statusIcon');
+const statusText = document.getElementById('statusText');
 
 // État
 let currentVideoUrl = '';
+let currentAnalysisData = null;
+let resultsExpanded = false;
+
+// --- Fonctions Utilitaires ---
+
+function showAnalysisStatus(data) {
+    // Extract metadata
+    const argCount = data.arguments_count !== undefined ? data.arguments_count : (data.arguments ? data.arguments.length : 0);
+
+    // Format date
+    let dateStr = 'Date inconnue';
+    if (data.last_updated) {
+        const date = new Date(data.last_updated);
+        dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Mode (if available in data, otherwise default)
+    const mode = data.mode || 'Standard';
+
+    // Update status panel
+    statusIcon.textContent = '✓';
+    statusText.textContent = 'Analyse disponible';
+
+    statusMetadataDiv.innerHTML = `
+        <span class="status-metadata-item">📅 ${dateStr}</span>
+        <span class="status-metadata-item">⚙️ Mode: ${mode}</span>
+        <span class="status-metadata-item">💬 ${argCount} argument${argCount > 1 ? 's' : ''}</span>
+    `;
+
+    // Show status panel
+    analysisStatusDiv.classList.remove('hidden');
+    document.getElementById('controls').classList.add('hidden');
+}
+
+function hideAnalysisStatus() {
+    analysisStatusDiv.classList.add('hidden');
+}
+
+function showNoAnalysisState() {
+    statusIcon.textContent = '⚠';
+    statusText.textContent = 'Aucune analyse disponible';
+    statusMetadataDiv.innerHTML = '<span class="status-metadata-item">Lancez une nouvelle analyse pour commencer</span>';
+
+    analysisStatusDiv.classList.remove('hidden');
+    document.getElementById('controls').classList.remove('hidden');
+
+    // Hide toggle button, only show analyze button
+    toggleResultsBtn.classList.add('hidden');
+}
 
 // --- Fonctions Utilitaires ---
 
@@ -392,10 +446,11 @@ function renderResults(data) {
     // 3. Stockage du rapport brut
     rawReport.textContent = data.report_markdown;
 
-    // Affichage
+    // Store analysis data
+    currentAnalysisData = data;
+
+    // Don't auto-expand results - let the toggle button control it
     loadingDiv.classList.add('hidden');
-    resultsDiv.classList.remove('hidden');
-    document.getElementById('controls').classList.add('hidden');
 }
 
 // --- Logique Principale ---
@@ -416,7 +471,11 @@ async function analyzeVideo(forceRefresh = false) {
         // Reset UI
         errorDiv.classList.add('hidden');
         resultsDiv.classList.add('hidden');
-        document.getElementById('controls').classList.add('hidden'); // Cacher le bouton principal
+        resultsDiv.classList.add('collapsed');
+        resultsExpanded = false;
+        toggleResultsBtn.classList.remove('expanded');
+        document.getElementById('controls').classList.add('hidden');
+        analysisStatusDiv.classList.add('hidden');
         loadingDiv.classList.remove('hidden');
 
         currentVideoUrl = await getCurrentVideoUrl();
@@ -441,6 +500,7 @@ async function analyzeVideo(forceRefresh = false) {
         // Sauvegarde et Affichage
         await saveAnalysis(currentVideoUrl, data.data);
         renderResults(data.data);
+        showAnalysisStatus(data.data);
 
         if (data.data.cached) {
             showStatus('Résultat récupéré du cache', 'info');
@@ -451,7 +511,13 @@ async function analyzeVideo(forceRefresh = false) {
     } catch (error) {
         console.error('Erreur:', error);
         showError(error.message);
-        document.getElementById('controls').classList.remove('hidden'); // Réafficher bouton si erreur
+
+        // Check if error is "no analysis found" vs actual error
+        if (error.message.includes('Aucune analyse') || error.message.includes('No analysis')) {
+            showNoAnalysisState();
+        } else {
+            document.getElementById('controls').classList.remove('hidden');
+        }
     }
 }
 
@@ -461,23 +527,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         currentVideoUrl = await getCurrentVideoUrl();
 
-        // Vérifier si une analyse existe déjà
-        const existingData = await checkExistingAnalysis(currentVideoUrl);
+        // Auto-check DB for existing analysis
+        loadingDiv.classList.remove('hidden');
 
-        if (existingData) {
-            console.log("Données récupérées du cache");
-            renderResults(existingData);
-        } else {
-            // Afficher l'état initial
-            document.getElementById('controls').classList.remove('hidden');
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: currentVideoUrl,
+                force_refresh: false
+            })
+        });
+
+        loadingDiv.classList.add('hidden');
+
+        if (!response.ok) {
+            // No analysis found or error
+            const error = await response.json();
+            console.log('No existing analysis:', error.detail);
+            showNoAnalysisState();
+            return;
         }
+
+        const data = await response.json();
+
+        // Analysis found - render and show status
+        await saveAnalysis(currentVideoUrl, data.data);
+        renderResults(data.data);
+        showAnalysisStatus(data.data);
 
     } catch (e) {
         console.error("Erreur init:", e);
-        // On affiche l'erreur exacte pour le debug
+        loadingDiv.classList.add('hidden');
         showStatus(`⚠️ ${e.message}`, 'warning');
-        // On laisse le bouton activé pour permettre de réessayer manuellement
-        analyzeBtn.disabled = false;
+        showNoAnalysisState();
     }
 });
 
@@ -485,9 +568,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 analyzeBtn.addEventListener('click', () => analyzeVideo(false));
 
-newAnalysisBtn.addEventListener('click', () => {
-    // Forcer une nouvelle analyse
+reAnalyzeBtn.addEventListener('click', () => {
+    // Force a new analysis
     analyzeVideo(true);
+});
+
+toggleResultsBtn.addEventListener('click', () => {
+    resultsExpanded = !resultsExpanded;
+
+    if (resultsExpanded) {
+        // Show results
+        resultsDiv.classList.remove('collapsed');
+        resultsDiv.classList.remove('hidden');
+        toggleResultsBtn.classList.add('expanded');
+        toggleResultsBtn.querySelector('.toggle-text').textContent = 'Masquer l\'analyse';
+    } else {
+        // Hide results
+        resultsDiv.classList.add('collapsed');
+        toggleResultsBtn.classList.remove('expanded');
+        toggleResultsBtn.querySelector('.toggle-text').textContent = 'Voir l\'analyse';
+
+        // After animation, add hidden class
+        setTimeout(() => {
+            if (!resultsExpanded) {
+                resultsDiv.classList.add('hidden');
+            }
+        }, 400);
+    }
 });
 
 copyBtn.addEventListener('click', () => {

@@ -45,38 +45,29 @@ async function init() {
         // Récupérer l'URL de la vidéo YouTube
         currentVideoUrl = await API.getCurrentVideoUrl();
 
-        // Vérifier si une analyse existe en cache local
-        const cachedData = await cache.get(currentVideoUrl);
+        // Auto-check DB for existing analysis
+        UI.showLoading('Vérification de l\'analyse...');
 
-        if (cachedData) {
-            console.log("Données récupérées du cache local");
-            UI.renderResults(cachedData);
-        } else {
-            // Afficher le bouton "Analyser"
-            UI.showControls();
+        try {
+            const response = await API.analyzeVideo(currentVideoUrl, false);
 
-            // Récupérer les analyses disponibles depuis le serveur
-            const videoId = API.extractVideoId(currentVideoUrl);
-            if (videoId) {
-                try {
-                    const availableAnalyses = await API.getAvailableAnalyses(videoId);
-                    if (availableAnalyses && availableAnalyses.analyses && availableAnalyses.analyses.length > 0) {
-                        console.log(`${availableAnalyses.total_count} analyses disponibles`);
-                        UI.renderAvailableAnalyses(availableAnalyses, (mode) => {
-                            viewExistingAnalysis(mode);
-                        });
-                    }
-                } catch (e) {
-                    console.warn("Impossible de récupérer les analyses disponibles:", e);
-                    // Continue normally - not a critical error
-                }
-            }
+            // Analysis found - render and show status
+            await cache.set(currentVideoUrl, response.data);
+            UI.renderResults(response.data);
+            UI.showAnalysisStatus(response.data);
+
+        } catch (error) {
+            // No analysis found or error
+            console.log('No existing analysis:', error.message);
+            UI.hideLoading();
+            UI.showNoAnalysisState();
         }
 
     } catch (e) {
         console.error("Erreur init:", e);
+        UI.hideLoading();
         UI.showStatus(`⚠️ ${e.message}`, 'warning');
-        UI.showControls();
+        UI.showNoAnalysisState();
     }
 }
 
@@ -85,7 +76,9 @@ async function init() {
  */
 async function analyzeVideo(forceRefresh = false) {
     try {
-        UI.showLoading();
+        // Reset UI
+        UI.hideAnalysisStatus();
+        UI.showLoading(forceRefresh ? 'Nouvelle analyse en cours...' : 'Analyse en cours...');
 
         // Récupérer l'URL si pas encore fait
         if (!currentVideoUrl) {
@@ -100,6 +93,7 @@ async function analyzeVideo(forceRefresh = false) {
 
         // Afficher les résultats
         UI.renderResults(response.data);
+        UI.showAnalysisStatus(response.data);
 
         if (response.data.cached) {
             UI.showStatus('Résultat récupéré du cache', 'info');
@@ -115,7 +109,7 @@ async function analyzeVideo(forceRefresh = false) {
             Auth.showSetupScreen();
         } else {
             UI.showError(error.message);
-            UI.showControls();
+            UI.showNoAnalysisState();
         }
     }
 }
@@ -138,7 +132,7 @@ function copyReport() {
  * Event listeners
  */
 function setupEventListeners() {
-    const { analyzeBtn, newAnalysisBtn, copyBtn } = UI.getButtons();
+    const { analyzeBtn, newAnalysisBtn, copyBtn, reAnalyzeBtn } = UI.getButtons();
 
     if (analyzeBtn) {
         analyzeBtn.addEventListener('click', () => analyzeVideo(false));
@@ -146,6 +140,10 @@ function setupEventListeners() {
 
     if (newAnalysisBtn) {
         newAnalysisBtn.addEventListener('click', () => analyzeVideo(true));
+    }
+
+    if (reAnalyzeBtn) {
+        reAnalyzeBtn.addEventListener('click', () => analyzeVideo(true));
     }
 
     if (copyBtn) {

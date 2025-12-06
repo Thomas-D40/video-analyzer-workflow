@@ -7,6 +7,11 @@ let loadingDiv, resultsDiv, errorDiv, statusDiv;
 let videoSummary, argumentsList, rawReport;
 let modal, closeModalBtn, modalSourcesList;
 let analyzeBtn, newAnalysisBtn, copyBtn, controlsDiv;
+let analysisStatusDiv, statusMetadataDiv, toggleResultsBtn, reAnalyzeBtn, statusIcon, statusText;
+
+// État
+let currentAnalysisData = null;
+let resultsExpanded = false;
 
 /**
  * Initialise les éléments DOM du module UI
@@ -25,6 +30,14 @@ export function initUIElements() {
     newAnalysisBtn = document.getElementById('newAnalysisBtn');
     copyBtn = document.getElementById('copyBtn');
 
+    // New status panel elements
+    analysisStatusDiv = document.getElementById('analysisStatus');
+    statusMetadataDiv = document.getElementById('statusMetadata');
+    toggleResultsBtn = document.getElementById('toggleResultsBtn');
+    reAnalyzeBtn = document.getElementById('reAnalyzeBtn');
+    statusIcon = document.getElementById('statusIcon');
+    statusText = document.getElementById('statusText');
+
     modal = document.getElementById('sourcesModal');
     closeModalBtn = document.getElementById('closeModalBtn');
     modalSourcesList = document.getElementById('modalSourcesList');
@@ -38,6 +51,11 @@ export function initUIElements() {
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeSourcesModal();
         });
+    }
+
+    // Event listener for toggle button
+    if (toggleResultsBtn) {
+        toggleResultsBtn.addEventListener('click', toggleResults);
     }
 }
 
@@ -99,6 +117,100 @@ export function showControls() {
  */
 export function hideControls() {
     if (controlsDiv) controlsDiv.classList.add('hidden');
+}
+
+/**
+ * Affiche le panneau de statut avec les métadonnées de l'analyse
+ */
+export function showAnalysisStatus(data) {
+    if (!analysisStatusDiv) return;
+
+    const argCount = data.arguments_count !== undefined ? data.arguments_count : (data.arguments ? data.arguments.length : 0);
+
+    let dateStr = 'Date inconnue';
+    if (data.last_updated) {
+        const date = new Date(data.last_updated);
+        dateStr = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    const mode = data.mode || 'Standard';
+
+    if (statusIcon) statusIcon.textContent = '✓';
+    if (statusText) statusText.textContent = 'Analyse disponible';
+
+    if (statusMetadataDiv) {
+        statusMetadataDiv.innerHTML = `
+            <span class="status-metadata-item">📅 ${dateStr}</span>
+            <span class="status-metadata-item">⚙️ Mode: ${mode}</span>
+            <span class="status-metadata-item">💬 ${argCount} argument${argCount > 1 ? 's' : ''}</span>
+        `;
+    }
+
+    analysisStatusDiv.classList.remove('hidden');
+    if (toggleResultsBtn) toggleResultsBtn.classList.remove('hidden');
+    hideControls();
+
+    // Store data for potential re-use
+    currentAnalysisData = data;
+}
+
+/**
+ * Masque le panneau de statut
+ */
+export function hideAnalysisStatus() {
+    if (analysisStatusDiv) analysisStatusDiv.classList.add('hidden');
+}
+
+/**
+ * Affiche l'état "aucune analyse disponible"
+ */
+export function showNoAnalysisState() {
+    if (!analysisStatusDiv) return;
+
+    if (statusIcon) statusIcon.textContent = '⚠';
+    if (statusText) statusText.textContent = 'Aucune analyse disponible';
+    if (statusMetadataDiv) {
+        statusMetadataDiv.innerHTML = '<span class="status-metadata-item">Lancez une nouvelle analyse pour commencer</span>';
+    }
+
+    analysisStatusDiv.classList.remove('hidden');
+    showControls();
+
+    if (toggleResultsBtn) toggleResultsBtn.classList.add('hidden');
+}
+
+/**
+ * Toggle l'affichage des résultats
+ */
+function toggleResults() {
+    resultsExpanded = !resultsExpanded;
+
+    if (resultsExpanded) {
+        if (resultsDiv) {
+            resultsDiv.classList.remove('collapsed');
+            resultsDiv.classList.remove('hidden');
+        }
+        if (toggleResultsBtn) {
+            toggleResultsBtn.classList.add('expanded');
+            const toggleText = toggleResultsBtn.querySelector('.toggle-text');
+            if (toggleText) toggleText.textContent = 'Masquer l\'analyse';
+        }
+    } else {
+        if (resultsDiv) {
+            resultsDiv.classList.add('collapsed');
+        }
+        if (toggleResultsBtn) {
+            toggleResultsBtn.classList.remove('expanded');
+            const toggleText = toggleResultsBtn.querySelector('.toggle-text');
+            if (toggleText) toggleText.textContent = 'Voir l\'analyse';
+        }
+
+        setTimeout(() => {
+            if (!resultsExpanded && resultsDiv) {
+                resultsDiv.classList.add('hidden');
+            }
+        }, 400);
+    }
 }
 
 /**
@@ -260,10 +372,11 @@ export function renderResults(data) {
         rawReport.textContent = data.report_markdown;
     }
 
-    // Affichage
+    // Store analysis data
+    currentAnalysisData = data;
+
+    // Don't auto-expand results - let the toggle button control it
     hideLoading();
-    if (resultsDiv) resultsDiv.classList.remove('hidden');
-    hideControls();
 }
 
 /**
@@ -490,7 +603,7 @@ function getReliabilityLabel(score) {
  * Retourne les références aux boutons pour les event listeners
  */
 export function getButtons() {
-    return { analyzeBtn, newAnalysisBtn, copyBtn };
+    return { analyzeBtn, newAnalysisBtn, copyBtn, reAnalyzeBtn };
 }
 
 /**
