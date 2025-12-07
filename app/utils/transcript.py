@@ -76,9 +76,8 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
                 return transcript_text.strip()
                 
         except Exception as e:
-            import traceback
+            # Expected fallback behavior - log warning without full traceback
             print(f"[WARN] Echec youtube-transcript-api: {e}")
-            print(f"[DEBUG] Traceback: {traceback.format_exc()}")
             # On continue vers le fallback yt-dlp
             
         # Méthode 2: yt-dlp (Fallback)
