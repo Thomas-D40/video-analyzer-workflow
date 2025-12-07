@@ -1282,6 +1282,13 @@ h1 {
     white-space: nowrap;
 }
 
+.available-mode-cost {
+    font-size: 11px;
+    color: #d97706;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
 .btn-switch-mode {
     padding: 6px 12px;
     background: #ed8936;
@@ -1297,6 +1304,15 @@ h1 {
 .btn-switch-mode:hover {
     background: #dd6b20;
     transform: translateY(-1px);
+}
+
+.btn-create-mode {
+    background: #f59e0b;
+    border: 2px solid #d97706;
+}
+
+.btn-create-mode:hover {
+    background: #d97706;
 }
 
 /* Progress Bar */

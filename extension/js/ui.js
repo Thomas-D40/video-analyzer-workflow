@@ -229,43 +229,65 @@ function showAvailableModes(data) {
         existingModes.remove();
     }
 
-    // Check if there are available analyses in cache_info
+    // Get current mode and available analyses
     const availableAnalyses = data.cache_info?.available_analyses || [];
-
-    if (!availableAnalyses || availableAnalyses.length === 0) {
-        return;
-    }
-
-    // Get current mode
     const currentMode = data.analysis_mode || data.cache_info?.selected_mode || 'simple';
 
-    // Filter out current mode and build list of other available modes
-    const otherModes = availableAnalyses.filter(a => a.mode !== currentMode);
+    // All possible modes with descriptions and cost info
+    const allModes = [
+        {
+            mode: 'simple',
+            desc: '⚡ Rapide - Basé sur les abstracts uniquement',
+            cost: 'Faible coût (~0.01€)'
+        },
+        {
+            mode: 'medium',
+            desc: '⚖️ Équilibré - 3 textes complets analysés',
+            cost: 'Coût moyen (~0.05€)'
+        },
+        {
+            mode: 'hard',
+            desc: '🔬 Approfondi - 6 textes complets analysés',
+            cost: 'Coût élevé (~0.10€)'
+        }
+    ];
+
+    // Build list of other modes (excluding current)
+    const otherModes = allModes.filter(m => m.mode !== currentMode);
 
     if (otherModes.length === 0) {
         return;
     }
 
-    const modeDescriptions = {
-        'simple': '⚡ Rapide - Basé sur les abstracts uniquement (plus rapide, moins approfondi)',
-        'medium': '⚖️ Équilibré - 3 textes complets analysés (bon compromis)',
-        'hard': '🔬 Approfondi - 6 textes complets analysés (analyse maximale)'
-    };
+    // Create HTML for each mode
+    const modesHtml = otherModes.map(modeConfig => {
+        const existingAnalysis = availableAnalyses.find(a => a.mode === modeConfig.mode);
+        const exists = !!existingAnalysis;
 
-    const modesHtml = otherModes.map(modeInfo => {
-        const desc = modeDescriptions[modeInfo.mode] || modeInfo.mode;
-        const ageText = modeInfo.age_days === 0 ? "Aujourd'hui" :
-                       modeInfo.age_days === 1 ? "Il y a 1 jour" :
-                       `Il y a ${modeInfo.age_days} jours`;
+        let statusHtml;
+        let buttonText;
+        let buttonClass = 'btn-switch-mode';
+
+        if (exists) {
+            const ageText = existingAnalysis.age_days === 0 ? "Aujourd'hui" :
+                           existingAnalysis.age_days === 1 ? "Il y a 1 jour" :
+                           `Il y a ${existingAnalysis.age_days} jours`;
+            statusHtml = `<span class="available-mode-age">✓ Analyse existante (${ageText})</span>`;
+            buttonText = 'Voir cette analyse';
+        } else {
+            statusHtml = `<span class="available-mode-cost">⚠️ ${modeConfig.cost}</span>`;
+            buttonText = 'Créer cette analyse';
+            buttonClass += ' btn-create-mode';
+        }
 
         return `
             <div class="available-mode-item">
                 <div class="available-mode-header">
-                    <span class="available-mode-desc">${desc}</span>
-                    <span class="available-mode-age">${ageText}</span>
+                    <span class="available-mode-desc">${modeConfig.desc}</span>
+                    ${statusHtml}
                 </div>
-                <button class="btn-switch-mode" data-mode="${modeInfo.mode}">
-                    Voir cette analyse
+                <button class="${buttonClass}" data-mode="${modeConfig.mode}" data-exists="${exists}">
+                    ${buttonText}
                 </button>
             </div>
         `;
@@ -293,7 +315,39 @@ function showAvailableModes(data) {
     section.querySelectorAll('.btn-switch-mode').forEach(btn => {
         btn.addEventListener('click', async () => {
             const mode = btn.dataset.mode;
-            await switchToMode(mode);
+            const exists = btn.dataset.exists === 'true';
+
+            // If analysis doesn't exist, show cost warning
+            if (!exists) {
+                const modeLabels = {
+                    'simple': 'Rapide',
+                    'medium': 'Équilibré',
+                    'hard': 'Approfondi'
+                };
+                const modeCosts = {
+                    'simple': '~0.01€',
+                    'medium': '~0.05€',
+                    'hard': '~0.10€'
+                };
+
+                const confirmed = confirm(
+                    `⚠️ ATTENTION - Nouvelle analyse requise\n\n` +
+                    `Mode: ${modeLabels[mode]}\n` +
+                    `Coût estimé: ${modeCosts[mode]}\n\n` +
+                    `Cette analyse n'existe pas encore. Une nouvelle analyse sera créée, ce qui consommera des crédits API.\n\n` +
+                    `Voulez-vous continuer ?`
+                );
+
+                if (!confirmed) {
+                    return;
+                }
+
+                // Create new analysis
+                await switchToMode(mode, true);
+            } else {
+                // Load existing analysis
+                await switchToMode(mode, false);
+            }
         });
     });
 }
@@ -301,15 +355,39 @@ function showAvailableModes(data) {
 /**
  * Switch to a different analysis mode
  */
-async function switchToMode(mode) {
+async function switchToMode(mode, forceNew = false) {
     try {
-        showLoading(`Chargement de l'analyse ${mode}...`);
+        const modeLabels = {
+            'simple': 'Rapide',
+            'medium': 'Équilibré',
+            'hard': 'Approfondi'
+        };
 
-        const { getCurrentVideoUrl } = await import('./api.js');
-        const { analyzeVideo } = await import('./api.js');
+        if (forceNew) {
+            showLoading(`Création de l'analyse ${modeLabels[mode]}...`, 0);
+        } else {
+            showLoading(`Chargement de l'analyse ${modeLabels[mode]}...`);
+        }
+
+        const { getCurrentVideoUrl, analyzeVideo, analyzeVideoStreaming } = await import('./api.js');
 
         const currentUrl = await getCurrentVideoUrl();
-        const response = await analyzeVideo(currentUrl, false, mode);
+
+        let response;
+        if (forceNew) {
+            // Use streaming for new analysis with progress
+            response = await analyzeVideoStreaming(
+                currentUrl,
+                true,  // force_refresh
+                mode,
+                (percent, message) => {
+                    showLoading(message, percent);
+                }
+            );
+        } else {
+            // Load existing analysis
+            response = await analyzeVideo(currentUrl, false, mode);
+        }
 
         // Update cache
         const browser = await import('./polyfill.js');
@@ -321,7 +399,8 @@ async function switchToMode(mode) {
         renderResults(response.data);
         showAnalysisStatus(response.data);
 
-        showStatus(`Analyse ${mode} chargée !`, 'success');
+        const statusMsg = forceNew ? `Analyse ${modeLabels[mode]} créée !` : `Analyse ${modeLabels[mode]} chargée !`;
+        showStatus(statusMsg, 'success');
     } catch (error) {
         showError(`Erreur lors du changement de mode: ${error.message}`);
     }
