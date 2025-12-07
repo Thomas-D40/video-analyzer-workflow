@@ -506,7 +506,7 @@ async def get_admin_stats():
     Returns:
         Statistics about the database and recent activity
     """
-    from app.services.storage import get_recent_analyses, get_database
+    from app.services.storage import list_analyses, get_database
     from datetime import datetime
 
     try:
@@ -529,7 +529,7 @@ async def get_admin_stats():
                         total_analyses += 1
 
         # Get recent analyses
-        recent_docs = await get_recent_analyses(limit=10)
+        recent_docs = await list_analyses(limit=10, skip=0)
         recent_analyses = []
 
         for doc in recent_docs:
