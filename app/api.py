@@ -16,7 +16,7 @@ import json
 
 from app.core.workflow import process_video, process_video_with_progress
 from app.config import get_settings
-from app.core.auth import verify_api_key
+from app.core.auth import verify_api_key, verify_admin_password
 from app.services.storage import submit_rating, get_available_analyses
 from app.utils.youtube import extract_video_id
 from app.constants import AnalysisMode, AnalysisStatus
@@ -146,7 +146,7 @@ For issues, visit: https://github.com/anthropics/claude-code/issues
 
 
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_dashboard():
+async def admin_dashboard(authorized: bool = Depends(verify_admin_password)):
     """Serve the admin dashboard HTML page."""
     try:
         admin_html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "admin.html")
@@ -499,7 +499,7 @@ class AdminStats(BaseModel):
 
 
 @app.get("/admin/stats")
-async def get_admin_stats():
+async def get_admin_stats(authorized: bool = Depends(verify_admin_password)):
     """
     Get admin dashboard statistics.
     
@@ -561,18 +561,35 @@ async def get_admin_stats():
 
 
 @app.get("/admin/config")
-async def get_admin_config():
+async def get_admin_config(authorized: bool = Depends(verify_admin_password)):
     """
     Get current configuration (excluding sensitive data).
-    
+
     Returns:
         Configuration details
     """
     settings = get_settings()
 
+    # Mask database credentials
+    masked_db_url = None
+    if settings.database_url:
+        if '@' in settings.database_url:
+            # mongodb://user:pass@host:port/db -> mongodb://***:***@host:port/db
+            parts = settings.database_url.split('@')
+            protocol_and_creds = parts[0]
+            rest = parts[1]
+
+            if '://' in protocol_and_creds:
+                protocol = protocol_and_creds.split('://')[0]
+                masked_db_url = f"{protocol}://***:***@{rest}"
+            else:
+                masked_db_url = "***"
+        else:
+            masked_db_url = settings.database_url
+
     return {
         "env": settings.env,
-        "database_url": settings.database_url.replace(settings.database_url.split('@')[-1].split('/')[0] if '@' in settings.database_url else '', '***') if settings.database_url else None,
+        "database_url": masked_db_url,
         "openai_configured": bool(settings.openai_api_key),
         "openai_model": settings.openai_model,
         "openai_smart_model": settings.openai_smart_model,
@@ -582,7 +599,7 @@ async def get_admin_config():
 
 
 @app.delete("/admin/videos/{video_id}")
-async def delete_video_analysis(video_id: str):
+async def delete_video_analysis(video_id: str, authorized: bool = Depends(verify_admin_password)):
     """
     Delete all analyses for a video.
     

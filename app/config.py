@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # API Security
     allowed_api_keys: str = ""
+    admin_password: Optional[str] = None
 
     # Enrichment - Smart Full-Text Filtering
     mcp_web_fetch_enabled: bool = Field(
