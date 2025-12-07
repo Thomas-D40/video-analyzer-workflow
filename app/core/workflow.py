@@ -273,7 +273,7 @@ async def process_video_with_progress(
     # Step 5: Research (parallel)
     await progress_callback("research", 45, f"Researching sources for {arg_count} arguments...")
     enriched_arguments = await research_all_arguments_parallel(
-        arguments, analysis_mode, language
+        arguments, analysis_mode
     )
     
     # Step 6: Pros/cons analysis
