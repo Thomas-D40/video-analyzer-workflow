@@ -149,3 +149,91 @@ export async function getCurrentVideoUrl() {
         throw e;
     }
 }
+
+/**
+ * Analyse une vidéo avec progression en streaming (SSE)
+ * @param {string} url - URL de la vidéo YouTube
+ * @param {boolean} forceRefresh - Force une nouvelle analyse
+ * @param {string} analysisMode - Mode d'analyse
+ * @param {Function} onProgress - Callback appelé pour chaque mise à jour: (percent, message) => void
+ * @returns {Promise<Object>} - Données de l'analyse finale
+ */
+export async function analyzeVideoStreaming(url, forceRefresh = false, analysisMode = 'simple', onProgress) {
+    const headers = { 'Content-Type': 'application/json' };
+
+    // Ajouter la clé API si disponible
+    const apiKey = getCurrentApiKey();
+    if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+    }
+
+    // Extraire les cookies YouTube
+    const youtubeCookies = await getYouTubeCookies();
+
+    const { getApiBaseUrl } = await import('./config.js');
+    const baseUrl = getApiBaseUrl();
+
+    const response = await fetch(`${baseUrl}/api/analyze/stream`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+            url: url,
+            force_refresh: forceRefresh,
+            analysis_mode: analysisMode,
+            youtube_cookies: youtubeCookies
+        })
+    });
+
+    // Gestion des erreurs HTTP
+    if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+            const error = new Error('AUTH_REQUIRED');
+            error.status = response.status;
+            throw error;
+        }
+        throw new Error(`HTTP error ${response.status}`);
+    }
+
+    // Lire le stream SSE
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResult = null;
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Garde la dernière ligne incomplète
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const eventData = JSON.parse(line.substring(6));
+
+                    if (eventData.type === 'progress') {
+                        // Appeler le callback de progression
+                        if (onProgress) {
+                            onProgress(eventData.percent, eventData.message);
+                        }
+                    } else if (eventData.type === 'complete') {
+                        // Analyse terminée
+                        finalResult = eventData.data;
+                    } else if (eventData.type === 'error') {
+                        throw new Error(eventData.message);
+                    }
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    if (!finalResult) {
+        throw new Error('Analysis completed but no result received');
+    }
+
+    return finalResult;
+}

@@ -295,6 +295,8 @@ async def select_best_cached_analysis(
         "age_days": age_days,
         "rating": best_analysis.average_rating,
         "rating_count": best_analysis.rating_count,
+        "updated_at": best_analysis.updated_at.isoformat() if best_analysis.updated_at else None,
+        "created_at": best_analysis.created_at.isoformat() if best_analysis.created_at else None,
         "available_modes": available_modes_info
     }
 

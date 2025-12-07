@@ -101,7 +101,7 @@ async function analyzeVideo(forceRefresh = false) {
     try {
         // Reset UI
         UI.hideAnalysisStatus();
-        UI.showLoading(forceRefresh ? 'Nouvelle analyse en cours...' : 'Analyse en cours...');
+        UI.showLoading(forceRefresh ? 'Nouvelle analyse en cours...' : 'Analyse en cours...', 0);
 
         // Récupérer l'URL si pas encore fait
         if (!currentVideoUrl) {
@@ -112,20 +112,41 @@ async function analyzeVideo(forceRefresh = false) {
         const analysisMode = UI.getSelectedMode();
         console.log('[Main] Starting analysis with mode:', analysisMode);
 
-        // Appel API
-        const response = await API.analyzeVideo(currentVideoUrl, forceRefresh, analysisMode);
+        // Use streaming API for new analyses
+        if (forceRefresh) {
+            const response = await API.analyzeVideoStreaming(
+                currentVideoUrl,
+                forceRefresh,
+                analysisMode,
+                (percent, message) => {
+                    // Progress callback
+                    UI.showLoading(message, percent);
+                }
+            );
 
-        // Sauvegarder en cache
-        await cache.set(currentVideoUrl, response.data);
+            // Sauvegarder en cache
+            await cache.set(currentVideoUrl, response.data);
 
-        // Afficher les résultats
-        UI.renderResults(response.data);
-        UI.showAnalysisStatus(response.data);
-
-        if (response.data.cached) {
-            UI.showStatus('Résultat récupéré du cache', 'info');
-        } else {
+            // Afficher les résultats
+            UI.renderResults(response.data);
+            UI.showAnalysisStatus(response.data);
             UI.showStatus('Analyse terminée !', 'success');
+        } else {
+            // For cached analyses, use regular endpoint (faster)
+            const response = await API.analyzeVideo(currentVideoUrl, false, analysisMode);
+
+            // Sauvegarder en cache
+            await cache.set(currentVideoUrl, response.data);
+
+            // Afficher les résultats
+            UI.renderResults(response.data);
+            UI.showAnalysisStatus(response.data);
+
+            if (response.data.cached) {
+                UI.showStatus('Résultat récupéré du cache', 'info');
+            } else {
+                UI.showStatus('Analyse terminée !', 'success');
+            }
         }
 
     } catch (error) {

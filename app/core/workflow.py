@@ -88,8 +88,10 @@ async def process_video(
             print(f"[INFO] {cache_metadata['message']}")
             result = cached_content.copy()  # Make a copy to avoid mutating cached data
 
-            # Add comprehensive cache metadata (including ratings)
+            # Add comprehensive cache metadata (including ratings and dates)
             result["cached"] = True
+            result["updated_at"] = cache_metadata.get("updated_at")
+            result["created_at"] = cache_metadata.get("created_at")
             result["cache_info"] = {
                 "reason": cache_metadata["reason"],
                 "message": cache_metadata["message"],
@@ -98,6 +100,8 @@ async def process_video(
                 "age_days": cache_metadata.get("age_days", 0),
                 "average_rating": cache_metadata.get("rating", 0.0),
                 "rating_count": cache_metadata.get("rating_count", 0),
+                "updated_at": cache_metadata.get("updated_at"),
+                "created_at": cache_metadata.get("created_at"),
                 "available_analyses": cache_metadata.get("available_modes", [])
             }
 
@@ -187,4 +191,139 @@ async def process_video(
     except Exception as e:
         print(f"[ERROR] Database save error: {e}")
 
+    return result
+
+
+async def process_video_with_progress(
+    youtube_url: str,
+    progress_callback,
+    force_refresh: bool = False,
+    youtube_cookies: str = None,
+    analysis_mode: AnalysisMode = AnalysisMode.SIMPLE
+) -> Dict[str, Any]:
+    """
+    Process video with progress tracking via callback.
+    
+    Progress callback is called with: (step_name: str, percent: int, message: str)
+    """
+    # Step 1: Extract video ID
+    await progress_callback("init", 5, "Extracting video ID...")
+    video_id = extract_video_id(youtube_url)
+    if not video_id:
+        raise ValueError("Unable to extract video ID from URL")
+
+    # Step 1.5: Check cache
+    if not force_refresh:
+        await progress_callback("cache", 10, "Checking for cached analysis...")
+        cache_result = await select_best_cached_analysis(
+            video_id,
+            requested_mode=analysis_mode,
+            max_age_days=CACHE_MAX_AGE_DAYS
+        )
+
+        cached_content, selected_mode, cache_metadata = cache_result
+
+        if cached_content and selected_mode:
+            await progress_callback("cache", 100, "Using cached analysis")
+            result = cached_content.copy()
+            result["cached"] = True
+            result["updated_at"] = cache_metadata.get("updated_at")
+            result["created_at"] = cache_metadata.get("created_at")
+            result["cache_info"] = {
+                "reason": cache_metadata["reason"],
+                "message": cache_metadata["message"],
+                "selected_mode": selected_mode.value,
+                "requested_mode": analysis_mode.value,
+                "age_days": cache_metadata.get("age_days", 0),
+                "average_rating": cache_metadata.get("rating", 0.0),
+                "rating_count": cache_metadata.get("rating_count", 0),
+                "updated_at": cache_metadata.get("updated_at"),
+                "created_at": cache_metadata.get("created_at"),
+                "available_analyses": cache_metadata.get("available_modes", [])
+            }
+            return result
+
+    # Step 2: Extract transcript
+    await progress_callback("transcript", 15, "Extracting video transcript...")
+    transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)
+    if not transcript_text or len(transcript_text.strip()) < TRANSCRIPT_MIN_LENGTH:
+        raise ValueError("Transcript not found or too short")
+
+    # Step 3: Extract arguments
+    await progress_callback("arguments", 25, "Extracting arguments from transcript...")
+    language, arguments = extract_arguments(transcript_text, video_id=video_id)
+
+    if not arguments:
+        await progress_callback("complete", 100, "No arguments found - analysis complete")
+        result = {
+            "video_id": video_id,
+            "youtube_url": youtube_url,
+            "language": language,
+            "arguments": [],
+            "report_markdown": "No substantial arguments found in this video.",
+            "analysis_mode": analysis_mode
+        }
+        await save_analysis(video_id, youtube_url, result, analysis_mode=analysis_mode)
+        return result
+
+    # Step 4: Generate search queries
+    await progress_callback("queries", 35, f"Generating search queries for {len(arguments)} arguments...")
+    arg_count = len(arguments)
+    
+    # Step 5: Research (parallel)
+    await progress_callback("research", 45, f"Researching sources for {arg_count} arguments...")
+    enriched_arguments = await research_all_arguments_parallel(
+        arguments, analysis_mode, language
+    )
+    
+    # Step 6: Pros/cons analysis
+    await progress_callback("analysis", 70, "Analyzing pros and cons from sources...")
+    for idx, arg in enumerate(enriched_arguments):
+        percent = 70 + int((idx / len(enriched_arguments)) * 20)
+        await progress_callback("analysis", percent, f"Analyzing argument {idx+1}/{len(enriched_arguments)}...")
+    
+    # Step 7: Aggregation
+    await progress_callback("aggregation", 90, "Calculating reliability scores...")
+    try:
+        aggregated_args_map = aggregate_results(enriched_arguments)
+        final_arguments = []
+        for original_arg in enriched_arguments:
+            arg_text = original_arg["argument"]
+            agg_data = aggregated_args_map.get(arg_text, {})
+            reliability = agg_data.get("reliability", 0.5)
+            original_arg["reliability_score"] = reliability
+            final_arguments.append(original_arg)
+        arguments = final_arguments
+    except Exception:
+        arguments = enriched_arguments
+
+    # Step 8: Report generation
+    await progress_callback("report", 95, "Generating final report...")
+    output_data = {
+        "video_id": video_id,
+        "youtube_url": youtube_url,
+        "language": language,
+        "arguments_count": len(arguments),
+        "arguments": arguments
+    }
+
+    report_markdown = generate_markdown_report(output_data)
+
+    result = {
+        "video_id": video_id,
+        "youtube_url": youtube_url,
+        "language": language,
+        "arguments": arguments,
+        "report_markdown": report_markdown,
+        "analysis_mode": analysis_mode
+    }
+
+    # Step 9: Save to database
+    await progress_callback("save", 98, "Saving to database...")
+    try:
+        await save_analysis(video_id, youtube_url, result, analysis_mode=analysis_mode)
+    except Exception as e:
+        print(f"[ERROR] Database save error: {e}")
+
+    await progress_callback("complete", 100, "Analysis complete!")
     return result

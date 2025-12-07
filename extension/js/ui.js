@@ -62,10 +62,46 @@ export function initUIElements() {
 }
 
 /**
- * Affiche le loader
+ * Affiche le loader avec progression optionnelle
  */
-export function showLoading(message = 'Analyse en cours...') {
-    if (loadingDiv) loadingDiv.classList.remove('hidden');
+export function showLoading(message = 'Analyse en cours...', percent = null) {
+    if (loadingDiv) {
+        loadingDiv.classList.remove('hidden');
+
+        // Update message
+        const loadingText = loadingDiv.querySelector('p:first-of-type');
+        if (loadingText) {
+            loadingText.textContent = message;
+        }
+
+        // Update or create progress bar
+        let progressBar = loadingDiv.querySelector('.progress-bar');
+        let progressPercent = loadingDiv.querySelector('.progress-percent');
+
+        if (percent !== null) {
+            if (!progressBar) {
+                const progressContainer = document.createElement('div');
+                progressContainer.className = 'progress-container';
+                progressContainer.innerHTML = `
+                    <div class="progress-bar-track">
+                        <div class="progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-percent">0%</div>
+                `;
+                loadingDiv.appendChild(progressContainer);
+                progressBar = progressContainer.querySelector('.progress-bar');
+                progressPercent = progressContainer.querySelector('.progress-percent');
+            }
+
+            if (progressBar) {
+                progressBar.style.width = `${percent}%`;
+            }
+            if (progressPercent) {
+                progressPercent.textContent = `${percent}%`;
+            }
+        }
+    }
+
     if (resultsDiv) resultsDiv.classList.add('hidden');
     if (errorDiv) errorDiv.classList.add('hidden');
     if (controlsDiv) controlsDiv.classList.add('hidden');
@@ -172,12 +208,123 @@ export function showAnalysisStatus(data) {
         `;
     }
 
+    // Show available modes if applicable
+    showAvailableModes(data);
+
     analysisStatusDiv.classList.remove('hidden');
     if (toggleResultsBtn) toggleResultsBtn.classList.remove('hidden');
     hideControls();
 
     // Store data for potential re-use
     currentAnalysisData = data;
+}
+
+/**
+ * Affiche les modes d'analyse disponibles
+ */
+function showAvailableModes(data) {
+    // Remove existing available modes section
+    const existingModes = document.getElementById('availableModesSection');
+    if (existingModes) {
+        existingModes.remove();
+    }
+
+    // Check if there are available analyses in cache_info
+    const availableAnalyses = data.cache_info?.available_analyses || [];
+
+    if (!availableAnalyses || availableAnalyses.length === 0) {
+        return;
+    }
+
+    // Get current mode
+    const currentMode = data.analysis_mode || data.cache_info?.selected_mode || 'simple';
+
+    // Filter out current mode and build list of other available modes
+    const otherModes = availableAnalyses.filter(a => a.mode !== currentMode);
+
+    if (otherModes.length === 0) {
+        return;
+    }
+
+    const modeDescriptions = {
+        'simple': '⚡ Rapide - Basé sur les abstracts uniquement (plus rapide, moins approfondi)',
+        'medium': '⚖️ Équilibré - 3 textes complets analysés (bon compromis)',
+        'hard': '🔬 Approfondi - 6 textes complets analysés (analyse maximale)'
+    };
+
+    const modesHtml = otherModes.map(modeInfo => {
+        const desc = modeDescriptions[modeInfo.mode] || modeInfo.mode;
+        const ageText = modeInfo.age_days === 0 ? "Aujourd'hui" :
+                       modeInfo.age_days === 1 ? "Il y a 1 jour" :
+                       `Il y a ${modeInfo.age_days} jours`;
+
+        return `
+            <div class="available-mode-item">
+                <div class="available-mode-header">
+                    <span class="available-mode-desc">${desc}</span>
+                    <span class="available-mode-age">${ageText}</span>
+                </div>
+                <button class="btn-switch-mode" data-mode="${modeInfo.mode}">
+                    Voir cette analyse
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    const section = document.createElement('div');
+    section.id = 'availableModesSection';
+    section.className = 'available-modes-section';
+    section.innerHTML = `
+        <div class="available-modes-header">
+            <span class="available-modes-icon">ℹ️</span>
+            <span class="available-modes-title">Autres modes d'analyse disponibles</span>
+        </div>
+        <div class="available-modes-list">
+            ${modesHtml}
+        </div>
+    `;
+
+    // Insert after analysis status
+    if (analysisStatusDiv && analysisStatusDiv.parentNode) {
+        analysisStatusDiv.parentNode.insertBefore(section, analysisStatusDiv.nextSibling);
+    }
+
+    // Add click handlers
+    section.querySelectorAll('.btn-switch-mode').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const mode = btn.dataset.mode;
+            await switchToMode(mode);
+        });
+    });
+}
+
+/**
+ * Switch to a different analysis mode
+ */
+async function switchToMode(mode) {
+    try {
+        showLoading(`Chargement de l'analyse ${mode}...`);
+
+        const { getCurrentVideoUrl } = await import('./api.js');
+        const { analyzeVideo } = await import('./api.js');
+
+        const currentUrl = await getCurrentVideoUrl();
+        const response = await analyzeVideo(currentUrl, false, mode);
+
+        // Update cache
+        const browser = await import('./polyfill.js');
+        const storageData = {};
+        storageData[currentUrl] = response.data;
+        await browser.default.storage.local.set(storageData);
+
+        // Render new results
+        renderResults(response.data);
+        showAnalysisStatus(response.data);
+
+        showStatus(`Analyse ${mode} chargée !`, 'success');
+    } catch (error) {
+        showError(`Erreur lors du changement de mode: ${error.message}`);
+    }
 }
 
 /**
