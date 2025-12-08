@@ -57,14 +57,13 @@ class AnalyzeRequest(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
-    """Réponse d'analyse de vidéo."""
-    status: str
-    video_id: str
+    """Réponse d'analyse de vidéo - structure proche de la DB."""
+    id: str = Field(description="YouTube video ID")
     youtube_url: str
-    arguments_count: int
-    report_markdown: str
-    data: Dict[str, Any]
-    cache_info: Optional[Dict[str, Any]] = None  # Information about cache usage and available analyses
+    analyses: Dict[str, Optional[Dict[str, Any]]] = Field(
+        description="Map of analysis modes (simple/medium/hard) to their data"
+    )
+    selected_mode: str = Field(description="The analysis mode that was selected/returned")
 
 
 @app.get("/")
@@ -160,13 +159,13 @@ async def admin_dashboard(authorized: bool = Depends(verify_admin_password)):
 async def analyze_video(request: AnalyzeRequest):
     """
     Analyse une vidéo YouTube.
-    
+
     Args:
         request: Contient l'URL de la vidéo YouTube
-        
+
     Returns:
-        Analyse complète avec arguments, sources et rapport Markdown
-        
+        Structure proche de la DB avec tous les modes d'analyse disponibles
+
     Raises:
         HTTPException: Si l'URL est invalide ou le traitement échoue
     """
@@ -178,16 +177,42 @@ async def analyze_video(request: AnalyzeRequest):
             analysis_mode=request.analysis_mode
         )
 
+        video_id = result["video_id"]
+
+        # Fetch all available analyses from DB
+        available_data = await get_available_analyses(video_id)
+
+        if not available_data:
+            # No DB data yet - return just the current analysis
+            analyses_map = {
+                request.analysis_mode.value: {
+                    "status": "completed",
+                    "created_at": result.get("created_at"),
+                    "updated_at": result.get("updated_at"),
+                    "content": result,
+                    "average_rating": 0.0,
+                    "rating_count": 0
+                }
+            }
+            # Add null entries for missing modes
+            for mode in ["simple", "medium", "hard"]:
+                if mode not in analyses_map:
+                    analyses_map[mode] = None
+        else:
+            # Use the analyses from DB
+            analyses_map = available_data.get("analyses", {})
+            # Ensure all modes are present (even if null)
+            for mode in ["simple", "medium", "hard"]:
+                if mode not in analyses_map:
+                    analyses_map[mode] = None
+
         return AnalyzeResponse(
-            status="success",
-            video_id=result["video_id"],
+            id=video_id,
             youtube_url=result["youtube_url"],
-            arguments_count=len(result["arguments"]),
-            report_markdown=result["report_markdown"],
-            data=result,
-            cache_info=result.get("cache_info")  # Include cache metadata if available
+            analyses=analyses_map,
+            selected_mode=request.analysis_mode.value
         )
-    
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -226,16 +251,43 @@ async def analyze_video_stream(request: AnalyzeRequest):
                     youtube_cookies=request.youtube_cookies,
                     analysis_mode=request.analysis_mode
                 )
+
+                video_id = result["video_id"]
+
+                # Fetch all available analyses from DB
+                available_data = await get_available_analyses(video_id)
+
+                if not available_data:
+                    # No DB data yet - return just the current analysis
+                    analyses_map = {
+                        request.analysis_mode.value: {
+                            "status": "completed",
+                            "created_at": result.get("created_at"),
+                            "updated_at": result.get("updated_at"),
+                            "content": result,
+                            "average_rating": 0.0,
+                            "rating_count": 0
+                        }
+                    }
+                    # Add null entries for missing modes
+                    for mode in ["simple", "medium", "hard"]:
+                        if mode not in analyses_map:
+                            analyses_map[mode] = None
+                else:
+                    # Use the analyses from DB
+                    analyses_map = available_data.get("analyses", {})
+                    # Ensure all modes are present (even if null)
+                    for mode in ["simple", "medium", "hard"]:
+                        if mode not in analyses_map:
+                            analyses_map[mode] = None
+
                 await progress_queue.put({
                     "type": "complete",
                     "data": {
-                        "status": "success",
-                        "video_id": result["video_id"],
+                        "id": video_id,
                         "youtube_url": result["youtube_url"],
-                        "arguments_count": len(result["arguments"]),
-                        "report_markdown": result["report_markdown"],
-                        "data": result,
-                        "cache_info": result.get("cache_info")
+                        "analyses": analyses_map,
+                        "selected_mode": request.analysis_mode.value
                     }
                 })
             except Exception as e:

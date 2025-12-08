@@ -68,11 +68,26 @@ async function init() {
             const availableAnalyses = await API.getAvailableAnalyses(videoId);
 
             if (availableAnalyses && availableAnalyses.analyses && availableAnalyses.analyses.length > 0) {
-                // Analysis exists - fetch it
+                // Analysis exists - fetch it (will return all analyses)
                 const response = await API.analyzeVideo(currentVideoUrl, false);
-                await cache.set(currentVideoUrl, response.data);
-                UI.renderResults(response.data);
-                UI.showAnalysisStatus(response.data);
+
+                // New structure: response has {id, youtube_url, analyses, selected_mode}
+                // Extract the selected analysis content
+                const selectedAnalysis = response.analyses[response.selected_mode];
+                if (selectedAnalysis && selectedAnalysis.content) {
+                    const analysisData = {
+                        ...selectedAnalysis.content,
+                        // Add metadata about all available analyses
+                        _all_analyses: response.analyses,
+                        _selected_mode: response.selected_mode
+                    };
+                    await cache.set(currentVideoUrl, analysisData);
+                    UI.renderResults(analysisData);
+                    UI.showAnalysisStatus(analysisData);
+                } else {
+                    UI.hideLoading();
+                    UI.showNoAnalysisState();
+                }
             } else {
                 // No analysis found
                 UI.hideLoading();
@@ -124,28 +139,48 @@ async function analyzeVideo(forceRefresh = false) {
                 }
             );
 
-            // Sauvegarder en cache
-            await cache.set(currentVideoUrl, response.data);
+            // New structure: extract the selected analysis content
+            const selectedAnalysis = response.analyses[response.selected_mode];
+            if (selectedAnalysis && selectedAnalysis.content) {
+                const analysisData = {
+                    ...selectedAnalysis.content,
+                    _all_analyses: response.analyses,
+                    _selected_mode: response.selected_mode
+                };
 
-            // Afficher les résultats
-            UI.renderResults(response.data);
-            UI.showAnalysisStatus(response.data);
-            UI.showStatus('Analyse terminée !', 'success');
+                // Sauvegarder en cache
+                await cache.set(currentVideoUrl, analysisData);
+
+                // Afficher les résultats
+                UI.renderResults(analysisData);
+                UI.showAnalysisStatus(analysisData);
+                UI.showStatus('Analyse terminée !', 'success');
+            }
         } else {
             // For cached analyses, use regular endpoint (faster)
             const response = await API.analyzeVideo(currentVideoUrl, false, analysisMode);
 
-            // Sauvegarder en cache
-            await cache.set(currentVideoUrl, response.data);
+            // New structure: extract the selected analysis content
+            const selectedAnalysis = response.analyses[response.selected_mode];
+            if (selectedAnalysis && selectedAnalysis.content) {
+                const analysisData = {
+                    ...selectedAnalysis.content,
+                    _all_analyses: response.analyses,
+                    _selected_mode: response.selected_mode
+                };
 
-            // Afficher les résultats
-            UI.renderResults(response.data);
-            UI.showAnalysisStatus(response.data);
+                // Sauvegarder en cache
+                await cache.set(currentVideoUrl, analysisData);
 
-            if (response.data.cached) {
-                UI.showStatus('Résultat récupéré du cache', 'info');
-            } else {
-                UI.showStatus('Analyse terminée !', 'success');
+                // Afficher les résultats
+                UI.renderResults(analysisData);
+                UI.showAnalysisStatus(analysisData);
+
+                if (analysisData.cached) {
+                    UI.showStatus('Résultat récupéré du cache', 'info');
+                } else {
+                    UI.showStatus('Analyse terminée !', 'success');
+                }
             }
         }
 

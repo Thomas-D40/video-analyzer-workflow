@@ -208,19 +208,18 @@ export function showAnalysisStatus(data) {
         `;
     }
 
-    // Check if cache_info exists with available_analyses
-    const hasAvailableAnalyses = data.cache_info?.available_analyses &&
-                                  data.cache_info.available_analyses.length > 0;
+    // Check if we have all analyses data (new structure)
+    const hasAllAnalyses = data._all_analyses && typeof data._all_analyses === 'object';
 
-    if (hasAvailableAnalyses) {
+    if (hasAllAnalyses) {
         // Hide the old "Analyse disponible" section - we use "Modes d'analyse" instead
         analysisStatusDiv.classList.add('hidden');
 
         // Show available modes as the primary interface
         showAvailableModes(data);
     } else {
-        // No cache_info or available_analyses - show basic status panel
-        console.warn('[UI] No cache_info.available_analyses found, showing basic status panel');
+        // No _all_analyses - show basic status panel
+        console.warn('[UI] No _all_analyses found, showing basic status panel');
         analysisStatusDiv.classList.remove('hidden');
 
         // Create a minimal "available modes" section to allow creating other modes
@@ -365,9 +364,9 @@ function showAvailableModes(data) {
         existingModes.remove();
     }
 
-    // Get current mode and available analyses
-    const availableAnalyses = data.cache_info?.available_analyses || [];
-    const currentMode = data.analysis_mode || data.cache_info?.selected_mode || 'simple';
+    // Get current mode and available analyses from new structure
+    const allAnalyses = data._all_analyses || {};
+    const currentMode = data._selected_mode || data.analysis_mode || 'simple';
 
     // All possible modes with descriptions and cost info
     const allModes = [
@@ -390,7 +389,7 @@ function showAvailableModes(data) {
 
     // Create HTML for each mode (including current mode)
     const modesHtml = allModes.map(modeConfig => {
-        const existingAnalysis = availableAnalyses.find(a => a.mode === modeConfig.mode);
+        const existingAnalysis = allAnalyses[modeConfig.mode];
         const exists = !!existingAnalysis;
         const isCurrent = modeConfig.mode === currentMode;
 
@@ -402,6 +401,8 @@ function showAvailableModes(data) {
         if (exists) {
             // Format date for existing analysis
             let dateStr = '';
+            let ageText = "Disponible";
+
             if (existingAnalysis.updated_at) {
                 const date = new Date(existingAnalysis.updated_at);
                 if (!isNaN(date.getTime())) {
@@ -411,12 +412,15 @@ function showAvailableModes(data) {
                         hour: '2-digit',
                         minute: '2-digit'
                     });
+
+                    // Calculate age
+                    const now = new Date();
+                    const ageDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+                    ageText = ageDays === 0 ? "Aujourd'hui" :
+                             ageDays === 1 ? "Il y a 1 jour" :
+                             `Il y a ${ageDays} jours`;
                 }
             }
-
-            const ageText = existingAnalysis.age_days === 0 ? "Aujourd'hui" :
-                           existingAnalysis.age_days === 1 ? "Il y a 1 jour" :
-                           `Il y a ${existingAnalysis.age_days} jours`;
 
             if (isCurrent) {
                 // Current mode - highlighted
@@ -548,15 +552,25 @@ async function switchToMode(mode, forceNew = false) {
             response = await analyzeVideo(currentUrl, false, mode);
         }
 
-        // Update cache
-        const browser = await import('./polyfill.js');
-        const storageData = {};
-        storageData[currentUrl] = response.data;
-        await browser.default.storage.local.set(storageData);
+        // Extract the selected analysis content from new structure
+        const selectedAnalysis = response.analyses[response.selected_mode];
+        if (selectedAnalysis && selectedAnalysis.content) {
+            const analysisData = {
+                ...selectedAnalysis.content,
+                _all_analyses: response.analyses,
+                _selected_mode: response.selected_mode
+            };
 
-        // Render new results
-        renderResults(response.data);
-        showAnalysisStatus(response.data);
+            // Update cache
+            const browser = await import('./polyfill.js');
+            const storageData = {};
+            storageData[currentUrl] = analysisData;
+            await browser.default.storage.local.set(storageData);
+
+            // Render new results
+            renderResults(analysisData);
+            showAnalysisStatus(analysisData);
+        }
 
         const statusMsg = forceNew ? `Analyse ${modeLabels[mode]} créée !` : `Analyse ${modeLabels[mode]} chargée !`;
         showStatus(statusMsg, 'success');
