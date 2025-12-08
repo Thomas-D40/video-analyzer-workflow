@@ -35,7 +35,7 @@ from app.utils.report_formatter import generate_markdown_report
 from app.core.parallel_research import research_all_arguments_parallel
 
 
-from app.services.storage import save_analysis, select_best_cached_analysis
+from app.services.storage import save_analysis, select_best_cached_analysis, get_available_analyses
 from app.constants import (
     AnalysisMode,
     CACHE_MAX_AGE_DAYS,
@@ -188,6 +188,42 @@ async def process_video(
     try:
         await save_analysis(video_id, youtube_url, result, analysis_mode=analysis_mode)
         print(f"[INFO] Analysis saved for {video_id} (mode: {analysis_mode})")
+
+        # After save, fetch available analyses to include in response
+        from datetime import datetime
+        available_data = await get_available_analyses(video_id)
+        if available_data:
+            # Build available_analyses array with metadata
+            available_analyses = []
+            for mode_str, analysis_data in available_data.get("analyses", {}).items():
+                if analysis_data and analysis_data.get("status") == "completed":
+                    updated_at = analysis_data.get("updated_at")
+                    if updated_at:
+                        age_days = (datetime.utcnow() - datetime.fromisoformat(updated_at.replace('Z', '+00:00'))).days
+                    else:
+                        age_days = 0
+
+                    available_analyses.append({
+                        "mode": mode_str,
+                        "age_days": age_days,
+                        "updated_at": updated_at,
+                        "average_rating": analysis_data.get("average_rating", 0.0),
+                        "rating_count": analysis_data.get("rating_count", 0)
+                    })
+
+            # Add cache_info to result
+            result["cache_info"] = {
+                "reason": "new_analysis",
+                "message": f"New analysis created in mode '{analysis_mode.value}'",
+                "selected_mode": analysis_mode.value,
+                "requested_mode": analysis_mode.value,
+                "age_days": 0,
+                "average_rating": 0.0,
+                "rating_count": 0,
+                "updated_at": available_data.get("updated_at"),
+                "created_at": available_data.get("created_at"),
+                "available_analyses": available_analyses
+            }
     except Exception as e:
         print(f"[ERROR] Database save error: {e}")
 
@@ -322,6 +358,42 @@ async def process_video_with_progress(
     await progress_callback("save", 98, "Saving to database...")
     try:
         await save_analysis(video_id, youtube_url, result, analysis_mode=analysis_mode)
+
+        # After save, fetch available analyses to include in response
+        from datetime import datetime
+        available_data = await get_available_analyses(video_id)
+        if available_data:
+            # Build available_analyses array with metadata
+            available_analyses = []
+            for mode_str, analysis_data in available_data.get("analyses", {}).items():
+                if analysis_data and analysis_data.get("status") == "completed":
+                    updated_at = analysis_data.get("updated_at")
+                    if updated_at:
+                        age_days = (datetime.utcnow() - datetime.fromisoformat(updated_at.replace('Z', '+00:00'))).days
+                    else:
+                        age_days = 0
+
+                    available_analyses.append({
+                        "mode": mode_str,
+                        "age_days": age_days,
+                        "updated_at": updated_at,
+                        "average_rating": analysis_data.get("average_rating", 0.0),
+                        "rating_count": analysis_data.get("rating_count", 0)
+                    })
+
+            # Add cache_info to result
+            result["cache_info"] = {
+                "reason": "new_analysis",
+                "message": f"New analysis created in mode '{analysis_mode.value}'",
+                "selected_mode": analysis_mode.value,
+                "requested_mode": analysis_mode.value,
+                "age_days": 0,
+                "average_rating": 0.0,
+                "rating_count": 0,
+                "updated_at": available_data.get("updated_at"),
+                "created_at": available_data.get("created_at"),
+                "available_analyses": available_analyses
+            }
     except Exception as e:
         print(f"[ERROR] Database save error: {e}")
 

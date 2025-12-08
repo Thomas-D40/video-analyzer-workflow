@@ -28,7 +28,8 @@
       "Bash(grep:*)",
       "Bash(ls:*)",
       "Bash(PYTHONPATH=/mnt/e/Développement/video-analyzer-workflow python3:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []

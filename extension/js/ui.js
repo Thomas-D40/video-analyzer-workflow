@@ -208,15 +208,151 @@ export function showAnalysisStatus(data) {
         `;
     }
 
-    // Show available modes if applicable
-    showAvailableModes(data);
+    // Check if cache_info exists with available_analyses
+    const hasAvailableAnalyses = data.cache_info?.available_analyses &&
+                                  data.cache_info.available_analyses.length > 0;
 
-    analysisStatusDiv.classList.remove('hidden');
+    if (hasAvailableAnalyses) {
+        // Hide the old "Analyse disponible" section - we use "Modes d'analyse" instead
+        analysisStatusDiv.classList.add('hidden');
+
+        // Show available modes as the primary interface
+        showAvailableModes(data);
+    } else {
+        // No cache_info or available_analyses - show basic status panel
+        console.warn('[UI] No cache_info.available_analyses found, showing basic status panel');
+        analysisStatusDiv.classList.remove('hidden');
+
+        // Create a minimal "available modes" section to allow creating other modes
+        showFallbackModes(data);
+    }
+
     if (toggleResultsBtn) toggleResultsBtn.classList.remove('hidden');
     hideControls();
 
     // Store data for potential re-use
     currentAnalysisData = data;
+}
+
+/**
+ * Affiche les modes d'analyse en mode fallback (quand cache_info manque)
+ */
+function showFallbackModes(data) {
+    // Remove existing available modes section
+    const existingModes = document.getElementById('availableModesSection');
+    if (existingModes) {
+        existingModes.remove();
+    }
+
+    // Get current mode
+    const currentMode = data.analysis_mode || data.cache_info?.selected_mode || 'simple';
+
+    // All possible modes with descriptions and cost info
+    const allModes = [
+        {
+            mode: 'simple',
+            desc: '⚡ Rapide - Basé sur les abstracts uniquement',
+            cost: 'Faible coût (~0.01€)'
+        },
+        {
+            mode: 'medium',
+            desc: '⚖️ Équilibré - 3 textes complets analysés',
+            cost: 'Coût moyen (~0.05€)'
+        },
+        {
+            mode: 'hard',
+            desc: '🔬 Approfondi - 6 textes complets analysés',
+            cost: 'Coût élevé (~0.10€)'
+        }
+    ];
+
+    // Create HTML for each mode (only current mode is known to exist)
+    const modesHtml = allModes.map(modeConfig => {
+        const isCurrent = modeConfig.mode === currentMode;
+        let dateInfoHtml = '';
+        let buttonText;
+        let buttonClass = 'btn-switch-mode';
+        let itemClass = 'available-mode-item';
+
+        if (isCurrent) {
+            // Current mode - highlighted
+            itemClass += ' current-mode';
+            dateInfoHtml = `<div class="mode-date-info">👁️ Affichée</div>`;
+            buttonText = 'Affichée ci-dessous';
+            buttonClass += ' btn-current-mode';
+        } else {
+            // Unknown status - assume not created
+            dateInfoHtml = `<div class="mode-date-info mode-not-created">⚠️ Non créée • ${modeConfig.cost}</div>`;
+            buttonText = 'Créer cette analyse';
+            buttonClass += ' btn-create-mode';
+        }
+
+        return `
+            <div class="${itemClass}">
+                <div class="available-mode-header">
+                    <div class="available-mode-info">
+                        <span class="available-mode-desc">${modeConfig.desc}</span>
+                        ${dateInfoHtml}
+                    </div>
+                    <button class="${buttonClass}" data-mode="${modeConfig.mode}" data-exists="false" ${isCurrent ? 'disabled' : ''}>
+                        ${buttonText}
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const section = document.createElement('div');
+    section.id = 'availableModesSection';
+    section.className = 'available-modes-section';
+    section.innerHTML = `
+        <div class="available-modes-header">
+            <span class="available-modes-icon">📊</span>
+            <span class="available-modes-title">Modes d'analyse</span>
+        </div>
+        <div class="available-modes-list">
+            ${modesHtml}
+        </div>
+    `;
+
+    // Insert BEFORE the results panel (so it appears above the analysis details)
+    const resultsPanel = document.getElementById('results');
+    if (resultsPanel && resultsPanel.parentNode) {
+        resultsPanel.parentNode.insertBefore(section, resultsPanel);
+    }
+
+    // Add click handlers for create buttons
+    section.querySelectorAll('.btn-switch-mode:not(:disabled)').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const mode = btn.dataset.mode;
+
+            const modeLabels = {
+                'simple': 'Rapide',
+                'medium': 'Équilibré',
+                'hard': 'Approfondi'
+            };
+            const modeCosts = {
+                'simple': '~0.01€',
+                'medium': '~0.05€',
+                'hard': '~0.10€'
+            };
+
+            const confirmed = confirm(
+                `⚠️ ATTENTION - Nouvelle analyse requise\n\n` +
+                `Mode: ${modeLabels[mode]}\n` +
+                `Coût estimé: ${modeCosts[mode]}\n\n` +
+                `Une nouvelle analyse sera créée, ce qui consommera des crédits API.\n\n` +
+                `Voulez-vous continuer ?`
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            // Create new analysis
+            await switchToMode(mode, true);
+        });
+    });
 }
 
 /**
@@ -252,43 +388,65 @@ function showAvailableModes(data) {
         }
     ];
 
-    // Build list of other modes (excluding current)
-    const otherModes = allModes.filter(m => m.mode !== currentMode);
-
-    if (otherModes.length === 0) {
-        return;
-    }
-
-    // Create HTML for each mode
-    const modesHtml = otherModes.map(modeConfig => {
+    // Create HTML for each mode (including current mode)
+    const modesHtml = allModes.map(modeConfig => {
         const existingAnalysis = availableAnalyses.find(a => a.mode === modeConfig.mode);
         const exists = !!existingAnalysis;
+        const isCurrent = modeConfig.mode === currentMode;
 
-        let statusHtml;
+        let dateInfoHtml = '';
         let buttonText;
         let buttonClass = 'btn-switch-mode';
+        let itemClass = 'available-mode-item';
 
         if (exists) {
+            // Format date for existing analysis
+            let dateStr = '';
+            if (existingAnalysis.updated_at) {
+                const date = new Date(existingAnalysis.updated_at);
+                if (!isNaN(date.getTime())) {
+                    dateStr = date.toLocaleString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+            }
+
             const ageText = existingAnalysis.age_days === 0 ? "Aujourd'hui" :
                            existingAnalysis.age_days === 1 ? "Il y a 1 jour" :
                            `Il y a ${existingAnalysis.age_days} jours`;
-            statusHtml = `<span class="available-mode-age">✓ Analyse existante (${ageText})</span>`;
-            buttonText = 'Voir cette analyse';
+
+            if (isCurrent) {
+                // Current mode - highlighted
+                itemClass += ' current-mode';
+                dateInfoHtml = `<div class="mode-date-info">👁️ Affichée • ${dateStr || ageText}</div>`;
+                buttonText = 'Affichée ci-dessous';
+                buttonClass += ' btn-current-mode';
+            } else {
+                // Existing analysis not currently shown
+                dateInfoHtml = `<div class="mode-date-info">✓ Disponible • ${dateStr || ageText}</div>`;
+                buttonText = 'Voir cette analyse';
+            }
         } else {
-            statusHtml = `<span class="available-mode-cost">⚠️ ${modeConfig.cost}</span>`;
+            // Not created yet
+            dateInfoHtml = `<div class="mode-date-info mode-not-created">⚠️ Non créée • ${modeConfig.cost}</div>`;
             buttonText = 'Créer cette analyse';
             buttonClass += ' btn-create-mode';
         }
 
         return `
-            <div class="available-mode-item">
+            <div class="${itemClass}">
                 <div class="available-mode-header">
-                    <span class="available-mode-desc">${modeConfig.desc}</span>
-                    ${statusHtml}
+                    <div class="available-mode-info">
+                        <span class="available-mode-desc">${modeConfig.desc}</span>
+                        ${dateInfoHtml}
+                    </div>
+                    <button class="${buttonClass}" data-mode="${modeConfig.mode}" data-exists="${exists}" ${isCurrent ? 'disabled' : ''}>
+                        ${buttonText}
+                    </button>
                 </div>
-                <button class="${buttonClass}" data-mode="${modeConfig.mode}" data-exists="${exists}">
-                    ${buttonText}
-                </button>
             </div>
         `;
     }).join('');
@@ -298,21 +456,22 @@ function showAvailableModes(data) {
     section.className = 'available-modes-section';
     section.innerHTML = `
         <div class="available-modes-header">
-            <span class="available-modes-icon">ℹ️</span>
-            <span class="available-modes-title">Autres modes d'analyse disponibles</span>
+            <span class="available-modes-icon">📊</span>
+            <span class="available-modes-title">Modes d'analyse</span>
         </div>
         <div class="available-modes-list">
             ${modesHtml}
         </div>
     `;
 
-    // Insert after analysis status
-    if (analysisStatusDiv && analysisStatusDiv.parentNode) {
-        analysisStatusDiv.parentNode.insertBefore(section, analysisStatusDiv.nextSibling);
+    // Insert BEFORE the results panel (so it appears above the analysis details)
+    const resultsPanel = document.getElementById('results');
+    if (resultsPanel && resultsPanel.parentNode) {
+        resultsPanel.parentNode.insertBefore(section, resultsPanel);
     }
 
     // Add click handlers
-    section.querySelectorAll('.btn-switch-mode').forEach(btn => {
+    section.querySelectorAll('.btn-switch-mode:not(:disabled)').forEach(btn => {
         btn.addEventListener('click', async () => {
             const mode = btn.dataset.mode;
             const exists = btn.dataset.exists === 'true';

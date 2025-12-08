@@ -1224,8 +1224,8 @@ h1 {
 /* Available Modes Section */
 .available-modes-section {
     padding: 16px 24px;
-    background: #fffaf0;
-    border-bottom: 1px solid #fbd38d;
+    background: #f7fafc;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 .available-modes-header {
@@ -1240,9 +1240,9 @@ h1 {
 }
 
 .available-modes-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: #744210;
+    font-size: 14px;
+    font-weight: 700;
+    color: #2d3748;
 }
 
 .available-modes-list {
@@ -1253,39 +1253,59 @@ h1 {
 
 .available-mode-item {
     background: white;
-    border: 1px solid #fbd38d;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 12px;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    transition: all 0.2s;
+}
+
+.available-mode-item:hover:not(.current-mode) {
+    border-color: #cbd5e0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.available-mode-item.current-mode {
+    background: #e6f7ff;
+    border: 2px solid #1890ff;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
 }
 
 .available-mode-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: center;
+    gap: 12px;
+}
+
+.available-mode-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .available-mode-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: #2d3748;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.mode-date-info {
+    font-size: 11px;
+    color: #48bb78;
     font-weight: 500;
-    line-height: 1.4;
-    flex: 1;
 }
 
-.available-mode-age {
-    font-size: 11px;
-    color: #718096;
-    white-space: nowrap;
-}
-
-.available-mode-cost {
-    font-size: 11px;
+.mode-date-info.mode-not-created {
     color: #d97706;
-    white-space: nowrap;
+}
+
+.current-mode .mode-date-info {
+    color: #1890ff;
     font-weight: 600;
 }
 
@@ -1313,6 +1333,23 @@ h1 {
 
 .btn-create-mode:hover {
     background: #d97706;
+}
+
+.btn-current-mode {
+    background: #1890ff;
+    color: white;
+    border: none;
+    cursor: default;
+}
+
+.btn-current-mode:hover {
+    background: #1890ff;
+    transform: none;
+}
+
+.btn-switch-mode:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
 }
 
 /* Progress Bar */
