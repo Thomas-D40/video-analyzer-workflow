@@ -21,6 +21,10 @@ const cache = {
         const storageData = {};
         storageData[url] = data;
         await browser.storage.local.set(storageData);
+    },
+
+    async clear(url) {
+        await browser.storage.local.remove([url]);
     }
 };
 
@@ -48,10 +52,19 @@ async function init() {
         // Check if analysis exists in local cache first
         const cachedData = await cache.get(currentVideoUrl);
         if (cachedData) {
-            console.log("Données récupérées du cache local");
-            UI.renderResults(cachedData);
-            UI.showAnalysisStatus(cachedData);
-            return;
+            console.log("Données récupérées du cache local:", cachedData);
+
+            // Validate cache structure - must have new format {id, youtube_url, analyses}
+            if (cachedData.analyses && typeof cachedData.analyses === 'object') {
+                console.log("Cache valide - structure nouvelle");
+                UI.renderResults(cachedData);
+                UI.showAnalysisStatus(cachedData);
+                return;
+            } else {
+                // Old cache structure - clear it
+                console.warn("Cache invalide (ancienne structure) - nettoyage...");
+                await cache.clear(currentVideoUrl);
+            }
         }
 
         // Check DB for existing analysis WITHOUT triggering new analysis
@@ -211,9 +224,14 @@ function setupEventListeners() {
             currentVideoUrl = await API.getCurrentVideoUrl();
             const cachedData = await cache.get(currentVideoUrl);
 
-            if (cachedData) {
+            // Validate cache structure
+            if (cachedData && cachedData.analyses && typeof cachedData.analyses === 'object') {
                 UI.renderResults(cachedData);
             } else {
+                if (cachedData) {
+                    // Clear invalid cache
+                    await cache.clear(currentVideoUrl);
+                }
                 UI.showControls();
             }
         } catch (e) {

@@ -28,6 +28,11 @@ if (typeof browser === 'undefined') {
                     return new Promise((resolve) => {
                         chrome.storage.local.set(items, resolve);
                     });
+                },
+                remove: (keys) => {
+                    return new Promise((resolve) => {
+                        chrome.storage.local.remove(keys, resolve);
+                    });
                 }
             }
         },
