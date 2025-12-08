@@ -92,6 +92,8 @@ async def process_video(
             result["cached"] = True
             result["updated_at"] = cache_metadata.get("updated_at")
             result["created_at"] = cache_metadata.get("created_at")
+            available_modes = cache_metadata.get("available_modes", [])
+            print(f"[DEBUG] Cache hit - available_modes from metadata: {available_modes}")
             result["cache_info"] = {
                 "reason": cache_metadata["reason"],
                 "message": cache_metadata["message"],
@@ -102,7 +104,7 @@ async def process_video(
                 "rating_count": cache_metadata.get("rating_count", 0),
                 "updated_at": cache_metadata.get("updated_at"),
                 "created_at": cache_metadata.get("created_at"),
-                "available_analyses": cache_metadata.get("available_modes", [])
+                "available_analyses": available_modes
             }
 
             return result
@@ -191,27 +193,36 @@ async def process_video(
 
         # After save, fetch available analyses to include in response
         from datetime import datetime
+        from app.constants import AnalysisStatus
         available_data = await get_available_analyses(video_id)
         if available_data:
+            print(f"[DEBUG] available_data.analyses keys: {available_data.get('analyses', {}).keys()}")
             # Build available_analyses array with metadata
             available_analyses = []
             for mode_str, analysis_data in available_data.get("analyses", {}).items():
-                if analysis_data and analysis_data.get("status") == "completed":
-                    updated_at = analysis_data.get("updated_at")
-                    if updated_at:
-                        age_days = (datetime.utcnow() - datetime.fromisoformat(updated_at.replace('Z', '+00:00'))).days
-                    else:
-                        age_days = 0
+                if analysis_data:
+                    status = analysis_data.get("status")
+                    print(f"[DEBUG] Mode {mode_str}: status={status}, type={type(status)}")
+                    # Compare with both string and enum (for compatibility)
+                    if status == "completed" or status == AnalysisStatus.COMPLETED or status == AnalysisStatus.COMPLETED.value:
+                        updated_at = analysis_data.get("updated_at")
+                        if updated_at:
+                            age_days = (datetime.utcnow() - datetime.fromisoformat(updated_at.replace('Z', '+00:00'))).days
+                        else:
+                            age_days = 0
 
-                    available_analyses.append({
-                        "mode": mode_str,
-                        "age_days": age_days,
-                        "updated_at": updated_at,
-                        "average_rating": analysis_data.get("average_rating", 0.0),
-                        "rating_count": analysis_data.get("rating_count", 0)
-                    })
+                        available_analyses.append({
+                            "mode": mode_str,
+                            "age_days": age_days,
+                            "updated_at": updated_at,
+                            "average_rating": analysis_data.get("average_rating", 0.0),
+                            "rating_count": analysis_data.get("rating_count", 0)
+                        })
+                        print(f"[DEBUG] Added mode {mode_str} to available_analyses")
 
             # Add cache_info to result
+            print(f"[DEBUG] Final available_analyses count: {len(available_analyses)}")
+            print(f"[DEBUG] Final available_analyses: {available_analyses}")
             result["cache_info"] = {
                 "reason": "new_analysis",
                 "message": f"New analysis created in mode '{analysis_mode.value}'",
@@ -265,6 +276,8 @@ async def process_video_with_progress(
             result["cached"] = True
             result["updated_at"] = cache_metadata.get("updated_at")
             result["created_at"] = cache_metadata.get("created_at")
+            available_modes = cache_metadata.get("available_modes", [])
+            print(f"[DEBUG] Cache hit - available_modes from metadata: {available_modes}")
             result["cache_info"] = {
                 "reason": cache_metadata["reason"],
                 "message": cache_metadata["message"],
@@ -275,7 +288,7 @@ async def process_video_with_progress(
                 "rating_count": cache_metadata.get("rating_count", 0),
                 "updated_at": cache_metadata.get("updated_at"),
                 "created_at": cache_metadata.get("created_at"),
-                "available_analyses": cache_metadata.get("available_modes", [])
+                "available_analyses": available_modes
             }
             return result
 
@@ -361,27 +374,36 @@ async def process_video_with_progress(
 
         # After save, fetch available analyses to include in response
         from datetime import datetime
+        from app.constants import AnalysisStatus
         available_data = await get_available_analyses(video_id)
         if available_data:
+            print(f"[DEBUG] available_data.analyses keys: {available_data.get('analyses', {}).keys()}")
             # Build available_analyses array with metadata
             available_analyses = []
             for mode_str, analysis_data in available_data.get("analyses", {}).items():
-                if analysis_data and analysis_data.get("status") == "completed":
-                    updated_at = analysis_data.get("updated_at")
-                    if updated_at:
-                        age_days = (datetime.utcnow() - datetime.fromisoformat(updated_at.replace('Z', '+00:00'))).days
-                    else:
-                        age_days = 0
+                if analysis_data:
+                    status = analysis_data.get("status")
+                    print(f"[DEBUG] Mode {mode_str}: status={status}, type={type(status)}")
+                    # Compare with both string and enum (for compatibility)
+                    if status == "completed" or status == AnalysisStatus.COMPLETED or status == AnalysisStatus.COMPLETED.value:
+                        updated_at = analysis_data.get("updated_at")
+                        if updated_at:
+                            age_days = (datetime.utcnow() - datetime.fromisoformat(updated_at.replace('Z', '+00:00'))).days
+                        else:
+                            age_days = 0
 
-                    available_analyses.append({
-                        "mode": mode_str,
-                        "age_days": age_days,
-                        "updated_at": updated_at,
-                        "average_rating": analysis_data.get("average_rating", 0.0),
-                        "rating_count": analysis_data.get("rating_count", 0)
-                    })
+                        available_analyses.append({
+                            "mode": mode_str,
+                            "age_days": age_days,
+                            "updated_at": updated_at,
+                            "average_rating": analysis_data.get("average_rating", 0.0),
+                            "rating_count": analysis_data.get("rating_count", 0)
+                        })
+                        print(f"[DEBUG] Added mode {mode_str} to available_analyses")
 
             # Add cache_info to result
+            print(f"[DEBUG] Final available_analyses count: {len(available_analyses)}")
+            print(f"[DEBUG] Final available_analyses: {available_analyses}")
             result["cache_info"] = {
                 "reason": "new_analysis",
                 "message": f"New analysis created in mode '{analysis_mode.value}'",
