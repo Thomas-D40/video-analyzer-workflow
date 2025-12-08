@@ -63,7 +63,6 @@ class AnalyzeResponse(BaseModel):
     analyses: Dict[str, Optional[Dict[str, Any]]] = Field(
         description="Map of analysis modes (simple/medium/hard) to their data"
     )
-    selected_mode: str = Field(description="The analysis mode that was selected/returned")
 
 
 @app.get("/")
@@ -209,8 +208,7 @@ async def analyze_video(request: AnalyzeRequest):
         return AnalyzeResponse(
             id=video_id,
             youtube_url=result["youtube_url"],
-            analyses=analyses_map,
-            selected_mode=request.analysis_mode.value
+            analyses=analyses_map
         )
 
     except ValueError as e:
@@ -286,8 +284,7 @@ async def analyze_video_stream(request: AnalyzeRequest):
                     "data": {
                         "id": video_id,
                         "youtube_url": result["youtube_url"],
-                        "analyses": analyses_map,
-                        "selected_mode": request.analysis_mode.value
+                        "analyses": analyses_map
                     }
                 })
             except Exception as e:

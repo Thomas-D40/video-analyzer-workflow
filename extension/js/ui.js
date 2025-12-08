@@ -158,24 +158,45 @@ export function hideControls() {
 }
 
 /**
+ * Trouve la meilleure analyse disponible (highest quality)
+ */
+function getBestAvailableAnalysis(analyses) {
+    console.log('[UI] getBestAvailableAnalysis called with:', analyses);
+
+    const modeHierarchy = ['hard', 'medium', 'simple'];
+    for (const mode of modeHierarchy) {
+        console.log(`[UI] Checking mode ${mode}:`, analyses[mode]);
+        if (analyses[mode] && analyses[mode].content) {
+            console.log(`[UI] Found best analysis: ${mode}`);
+            return { mode, data: analyses[mode] };
+        }
+    }
+    console.warn('[UI] No analysis found with content');
+    return null;
+}
+
+/**
  * Affiche le panneau de statut avec les métadonnées de l'analyse
  */
-export function showAnalysisStatus(data) {
+export function showAnalysisStatus(videoData) {
     if (!analysisStatusDiv) return;
 
-    console.log('[UI] showAnalysisStatus called with data:', data);
+    console.log('[UI] showAnalysisStatus called with videoData:', videoData);
 
-    const argCount = data.arguments_count !== undefined ? data.arguments_count : (data.arguments ? data.arguments.length : 0);
+    // videoData structure: {id, youtube_url, analyses: {simple, medium, hard}}
+    const best = getBestAvailableAnalysis(videoData.analyses);
+    if (!best) {
+        console.warn('[UI] No analysis found in videoData');
+        showNoAnalysisState();
+        return;
+    }
+
+    const analysisContent = best.data.content;
+    const argCount = analysisContent.arguments ? analysisContent.arguments.length : 0;
 
     let dateStr = 'Date inconnue';
-    // Check multiple possible date fields
-    const dateSource = data.last_updated || data.cache_info?.last_updated || data.updated_at || data.created_at;
-    console.log('[UI] Date source found:', dateSource);
-
-    if (dateSource) {
-        const date = new Date(dateSource);
-        console.log('[UI] Parsed date:', date, 'isValid:', !isNaN(date.getTime()));
-
+    if (best.data.updated_at) {
+        const date = new Date(best.data.updated_at);
         if (!isNaN(date.getTime())) {
             dateStr = date.toLocaleString('fr-FR', {
                 day: 'numeric',
@@ -184,18 +205,15 @@ export function showAnalysisStatus(data) {
                 hour: '2-digit',
                 minute: '2-digit'
             });
-            console.log('[UI] Formatted date:', dateStr);
         }
     }
 
-    // Check multiple possible mode fields
-    const modeRaw = data.analysis_mode || data.mode || data.cache_info?.selected_mode || 'simple';
     const modeLabels = {
         'simple': 'Rapide',
         'medium': 'Équilibré',
         'hard': 'Approfondi'
     };
-    const mode = modeLabels[modeRaw] || modeRaw;
+    const mode = modeLabels[best.mode] || best.mode;
 
     if (statusIcon) statusIcon.textContent = '✓';
     if (statusText) statusText.textContent = 'Analyse disponible';
@@ -208,43 +226,32 @@ export function showAnalysisStatus(data) {
         `;
     }
 
-    // Check if we have all analyses data (new structure)
-    const hasAllAnalyses = data._all_analyses && typeof data._all_analyses === 'object';
+    // Hide the old "Analyse disponible" section
+    analysisStatusDiv.classList.add('hidden');
 
-    if (hasAllAnalyses) {
-        // Hide the old "Analyse disponible" section - we use "Modes d'analyse" instead
-        analysisStatusDiv.classList.add('hidden');
-
-        // Show available modes as the primary interface
-        showAvailableModes(data);
-    } else {
-        // No _all_analyses - show basic status panel
-        console.warn('[UI] No _all_analyses found, showing basic status panel');
-        analysisStatusDiv.classList.remove('hidden');
-
-        // Create a minimal "available modes" section to allow creating other modes
-        showFallbackModes(data);
-    }
+    // Show available modes interface
+    showAvailableModes(videoData, best.mode);
 
     if (toggleResultsBtn) toggleResultsBtn.classList.remove('hidden');
     hideControls();
 
     // Store data for potential re-use
-    currentAnalysisData = data;
+    currentAnalysisData = videoData;
 }
 
 /**
- * Affiche les modes d'analyse en mode fallback (quand cache_info manque)
+ * Affiche les modes d'analyse en mode fallback (quand analyses manquent)
  */
-function showFallbackModes(data) {
+function showFallbackModes(videoData) {
     // Remove existing available modes section
     const existingModes = document.getElementById('availableModesSection');
     if (existingModes) {
         existingModes.remove();
     }
 
-    // Get current mode
-    const currentMode = data.analysis_mode || data.cache_info?.selected_mode || 'simple';
+    // Try to find any available mode
+    const best = getBestAvailableAnalysis(videoData.analyses || {});
+    const currentMode = best ? best.mode : 'simple';
 
     // All possible modes with descriptions and cost info
     const allModes = [
@@ -357,16 +364,21 @@ function showFallbackModes(data) {
 /**
  * Affiche les modes d'analyse disponibles
  */
-function showAvailableModes(data) {
+function showAvailableModes(videoData, displayedMode) {
+    console.log('[UI] showAvailableModes called, displayedMode:', displayedMode);
+    console.log('[UI] videoData.analyses:', videoData.analyses);
+
     // Remove existing available modes section
     const existingModes = document.getElementById('availableModesSection');
     if (existingModes) {
         existingModes.remove();
     }
 
-    // Get current mode and available analyses from new structure
-    const allAnalyses = data._all_analyses || {};
-    const currentMode = data._selected_mode || data.analysis_mode || 'simple';
+    // videoData structure: {id, youtube_url, analyses: {simple, medium, hard}}
+    const allAnalyses = videoData.analyses || {};
+    const currentMode = displayedMode;
+
+    console.log('[UI] All analyses keys:', Object.keys(allAnalyses));
 
     // All possible modes with descriptions and cost info
     const allModes = [
@@ -392,6 +404,8 @@ function showAvailableModes(data) {
         const existingAnalysis = allAnalyses[modeConfig.mode];
         const exists = !!existingAnalysis;
         const isCurrent = modeConfig.mode === currentMode;
+
+        console.log(`[UI] Mode ${modeConfig.mode}: exists=${exists}, isCurrent=${isCurrent}, analysis=`, existingAnalysis);
 
         let dateInfoHtml = '';
         let buttonText;
@@ -552,25 +566,16 @@ async function switchToMode(mode, forceNew = false) {
             response = await analyzeVideo(currentUrl, false, mode);
         }
 
-        // Extract the selected analysis content from new structure
-        const selectedAnalysis = response.analyses[response.selected_mode];
-        if (selectedAnalysis && selectedAnalysis.content) {
-            const analysisData = {
-                ...selectedAnalysis.content,
-                _all_analyses: response.analyses,
-                _selected_mode: response.selected_mode
-            };
+        // response structure: {id, youtube_url, analyses: {simple, medium, hard}}
+        // Update cache
+        const browser = await import('./polyfill.js');
+        const storageData = {};
+        storageData[currentUrl] = response;
+        await browser.default.storage.local.set(storageData);
 
-            // Update cache
-            const browser = await import('./polyfill.js');
-            const storageData = {};
-            storageData[currentUrl] = analysisData;
-            await browser.default.storage.local.set(storageData);
-
-            // Render new results
-            renderResults(analysisData);
-            showAnalysisStatus(analysisData);
-        }
+        // Render new results
+        renderResults(response);
+        showAnalysisStatus(response);
 
         const statusMsg = forceNew ? `Analyse ${modeLabels[mode]} créée !` : `Analyse ${modeLabels[mode]} chargée !`;
         showStatus(statusMsg, 'success');
@@ -733,16 +738,37 @@ export function renderAvailableAnalyses(data, onViewAnalysis) {
 /**
  * Rend les résultats de l'analyse
  */
-export function renderResults(data) {
+export function renderResults(videoData) {
+    console.log('[UI] renderResults called with:', videoData);
+
+    // videoData structure: {id, youtube_url, analyses: {simple, medium, hard}}
+    // Find the best available analysis to display
+    const best = getBestAvailableAnalysis(videoData.analyses);
+    if (!best) {
+        console.error('[UI] No analysis to render');
+        return;
+    }
+
+    console.log('[UI] Best analysis found:', best.mode, best.data);
+
+    // Extract the actual analysis content
+    const data = best.data.content;
+    if (!data) {
+        console.error('[UI] No content in analysis:', best.data);
+        return;
+    }
+
+    console.log('[UI] Analysis content:', data);
+    console.log('[UI] Arguments count:', data.arguments ? data.arguments.length : 0);
+
     // 1. Résumé + Tableau récapitulatif
     const summaryTableHtml = renderSummaryTable(data);
-    const argCount = data.arguments_count !== undefined ? data.arguments_count : (data.arguments ? data.arguments.length : 0);
+    const argCount = data.arguments ? data.arguments.length : 0;
 
     let dateHtml = '';
-    // Check multiple possible date fields
-    const dateSource = data.last_updated || data.cache_info?.last_updated || data.updated_at || data.created_at;
-    if (dateSource) {
-        const date = new Date(dateSource);
+    // Use the analysis's updated_at from best.data
+    if (best.data.updated_at) {
+        const date = new Date(best.data.updated_at);
         if (!isNaN(date.getTime())) {
             const dateStr = date.toLocaleString('fr-FR', {
                 day: 'numeric',
@@ -770,13 +796,16 @@ export function renderResults(data) {
     // Event delegation pour le tableau
     const summaryTable = document.getElementById('summaryTable');
     if (summaryTable) {
+        // Capture arguments array for closure
+        const argumentsData = data.arguments || [];
+
         summaryTable.addEventListener('click', (e) => {
             const trigger = e.target.closest('.sources-trigger');
             if (trigger) {
                 e.stopPropagation();
                 const index = parseInt(trigger.dataset.argIndex);
-                if (data.arguments[index]) {
-                    openSourcesModal(data.arguments[index], e);
+                if (argumentsData[index]) {
+                    openSourcesModal(argumentsData[index], e);
                 }
                 return;
             }
@@ -806,8 +835,8 @@ export function renderResults(data) {
         rawReport.textContent = data.report_markdown;
     }
 
-    // Store analysis data
-    currentAnalysisData = data;
+    // Store video data (full structure)
+    currentAnalysisData = videoData;
 
     // Don't auto-expand results - let the toggle button control it
     hideLoading();
