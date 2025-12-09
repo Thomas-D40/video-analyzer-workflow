@@ -144,6 +144,41 @@ export function showStatus(message, type = 'info') {
 }
 
 /**
+ * Affiche le message "pas sur YouTube"
+ */
+export function showNotYouTubeMessage() {
+    hideLoading();
+    hideControls();
+    hideAnalysisStatus();
+
+    // Hide all other divs
+    if (errorDiv) errorDiv.classList.add('hidden');
+    if (statusDiv) statusDiv.classList.add('hidden');
+
+    // Remove any existing modes section
+    const existingModes = document.getElementById('availableModesSection');
+    if (existingModes) existingModes.remove();
+
+    // Show message in results div
+    if (resultsDiv) {
+        resultsDiv.innerHTML = `
+            <div style="padding: 40px 20px; text-align: center;">
+                <div style="font-size: 48px; margin-bottom: 20px;">📺</div>
+                <div style="font-size: 18px; font-weight: 600; color: #2d3748; margin-bottom: 12px;">
+                    Page YouTube requise
+                </div>
+                <div style="color: #718096; font-size: 14px; line-height: 1.6;">
+                    Cette extension fonctionne uniquement sur les vidéos YouTube.<br>
+                    Ouvrez une vidéo YouTube pour analyser son contenu.
+                </div>
+            </div>
+        `;
+        resultsDiv.classList.remove('hidden');
+        resultsDiv.classList.remove('collapsed');
+    }
+}
+
+/**
  * Affiche les contrôles (bouton analyser)
  */
 export function showControls() {
@@ -549,6 +584,10 @@ async function switchToMode(mode, forceNew = false) {
         const { getCurrentVideoUrl, analyzeVideo, analyzeVideoStreaming } = await import('./api.js');
 
         const currentUrl = await getCurrentVideoUrl();
+        if (!currentUrl) {
+            showNotYouTubeMessage();
+            return;
+        }
 
         let response;
         if (forceNew) {

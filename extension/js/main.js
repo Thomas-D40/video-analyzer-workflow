@@ -46,8 +46,14 @@ async function init() {
             return;
         }
 
-        // Récupérer l'URL de la vidéo YouTube
+        // Vérifier qu'on est sur YouTube
         currentVideoUrl = await API.getCurrentVideoUrl();
+        if (!currentVideoUrl) {
+            // Not on YouTube or can't access URL
+            UI.hideLoading();
+            UI.showNotYouTubeMessage();
+            return;
+        }
 
         // Check if analysis exists in local cache first
         const cachedData = await cache.get(currentVideoUrl);
@@ -110,8 +116,7 @@ async function init() {
     } catch (e) {
         console.error("Erreur init:", e);
         UI.hideLoading();
-        UI.showStatus(`⚠️ ${e.message}`, 'warning');
-        UI.showNoAnalysisState();
+        UI.showError(`Erreur: ${e.message}`);
     }
 }
 
@@ -127,6 +132,11 @@ async function analyzeVideo(forceRefresh = false) {
         // Récupérer l'URL si pas encore fait
         if (!currentVideoUrl) {
             currentVideoUrl = await API.getCurrentVideoUrl();
+            if (!currentVideoUrl) {
+                UI.hideLoading();
+                UI.showNotYouTubeMessage();
+                return;
+            }
         }
 
         // Get selected analysis mode
@@ -220,22 +230,24 @@ function setupEventListeners() {
         UI.showStatus('Clé API enregistrée avec succès !', 'success');
 
         // Réinitialiser l'extension
-        try {
-            currentVideoUrl = await API.getCurrentVideoUrl();
-            const cachedData = await cache.get(currentVideoUrl);
+        currentVideoUrl = await API.getCurrentVideoUrl();
 
-            // Validate cache structure
-            if (cachedData && cachedData.analyses && typeof cachedData.analyses === 'object') {
-                UI.renderResults(cachedData);
-            } else {
-                if (cachedData) {
-                    // Clear invalid cache
-                    await cache.clear(currentVideoUrl);
-                }
-                UI.showControls();
+        if (!currentVideoUrl) {
+            UI.showNotYouTubeMessage();
+            return;
+        }
+
+        const cachedData = await cache.get(currentVideoUrl);
+
+        // Validate cache structure
+        if (cachedData && cachedData.analyses && typeof cachedData.analyses === 'object') {
+            UI.renderResults(cachedData);
+        } else {
+            if (cachedData) {
+                // Clear invalid cache
+                await cache.clear(currentVideoUrl);
             }
-        } catch (e) {
-            UI.showControls();
+            UI.showNoAnalysisState();
         }
     });
 }

@@ -344,7 +344,7 @@ class AvailableAnalysesResponse(BaseModel):
     total_count: int
 
 
-@app.get("/api/analyze/{video_id}/available", response_model=AvailableAnalysesResponse)
+@app.get("/api/analyze/{video_id}", response_model=AvailableAnalysesResponse, dependencies=[Depends(verify_api_key)])
 async def get_available_analyses_endpoint(video_id: str):
     """
     Get all available analyses for a video.
@@ -411,20 +411,24 @@ async def get_available_analyses_endpoint(video_id: str):
             if analysis_dict is None:
                 continue
 
-            # Parse timestamps
-            created_at = datetime.fromisoformat(analysis_dict["created_at"].replace("Z", "+00:00"))
-            updated_at = datetime.fromisoformat(analysis_dict["updated_at"].replace("Z", "+00:00"))
+            # Parse timestamps safely
+            updated_at = analysis_dict.get("updated_at")
+            if isinstance(updated_at, str):
+                updated_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            elif not isinstance(updated_at, datetime):
+                updated_at = datetime.utcnow()
+
             age_days = (now - updated_at).days
 
             # Get content
             content = analysis_dict.get("content", {})
-            arguments_count = len(content.get("arguments", []))
+            arguments_count = len(content.get("arguments", [])) if content else 0
 
             available_analyses_list.append(AvailableAnalysis(
                 analysis_mode=mode,
                 age_days=age_days,
-                created_at=analysis_dict["created_at"],
-                updated_at=analysis_dict["updated_at"],
+                created_at=analysis_dict.get("created_at"),
+                updated_at=analysis_dict.get("updated_at"),
                 average_rating=analysis_dict.get("average_rating", 0.0),
                 rating_count=analysis_dict.get("rating_count", 0),
                 arguments_count=arguments_count,
@@ -440,6 +444,9 @@ async def get_available_analyses_endpoint(video_id: str):
         )
 
     except Exception as e:
+        import traceback
+        print(f"[ERROR] get_available_analyses_endpoint: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error fetching analyses: {str(e)}")
 
 
