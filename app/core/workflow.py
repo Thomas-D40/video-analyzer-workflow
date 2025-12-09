@@ -35,10 +35,9 @@ from app.utils.report_formatter import generate_markdown_report
 from app.core.parallel_research import research_all_arguments_parallel
 
 
-from app.services.storage import save_analysis, select_best_cached_analysis, get_available_analyses
+from app.services.storage import save_analysis, get_available_analyses
 from app.constants import (
     AnalysisMode,
-    CACHE_MAX_AGE_DAYS,
     TRANSCRIPT_MIN_LENGTH
 )
 
@@ -73,47 +72,27 @@ async def process_video(
     if not video_id:
         raise ValueError("Unable to extract video ID from URL")
 
-    # Step 1.5: Smart cache selection
+    # Step 1.5: Check cache
     if not force_refresh:
-        cache_result = await select_best_cached_analysis(
-            video_id,
-            requested_mode=analysis_mode,
-            max_age_days=CACHE_MAX_AGE_DAYS
-        )
+        all_analyses = await get_available_analyses(video_id)
 
-        cached_content, selected_mode, cache_metadata = cache_result
+        if all_analyses and all_analyses.get("analyses"):
+            # Video exists in database
+            requested_analysis = all_analyses["analyses"].get(analysis_mode.value)
 
-        if cached_content and selected_mode:
-            # Cache hit! Return cached analysis with metadata
-            print(f"[INFO] {cache_metadata['message']}")
-            result = cached_content.copy()  # Make a copy to avoid mutating cached data
-
-            # Add comprehensive cache metadata (including ratings and dates)
-            result["cached"] = True
-            result["updated_at"] = cache_metadata.get("updated_at")
-            result["created_at"] = cache_metadata.get("created_at")
-            available_modes = cache_metadata.get("available_modes", [])
-            print(f"[DEBUG] Cache hit - available_modes from metadata: {available_modes}")
-            result["cache_info"] = {
-                "reason": cache_metadata["reason"],
-                "message": cache_metadata["message"],
-                "selected_mode": selected_mode.value,
-                "requested_mode": analysis_mode.value,
-                "age_days": cache_metadata.get("age_days", 0),
-                "average_rating": cache_metadata.get("rating", 0.0),
-                "rating_count": cache_metadata.get("rating_count", 0),
-                "updated_at": cache_metadata.get("updated_at"),
-                "created_at": cache_metadata.get("created_at"),
-                "available_analyses": available_modes
-            }
-
-            return result
+            if requested_analysis and requested_analysis.get("status") == "completed":
+                # Requested mode is available - return all analyses
+                print(f"[INFO] Cache hit for mode '{analysis_mode.value}'")
+                result = all_analyses.copy()
+                result["cached"] = True
+                print(f"[DEBUG] Returning all analyses: {list(result['analyses'].keys())}")
+                return result
+            else:
+                # Requested mode not available, need to generate it
+                print(f"[INFO] Mode '{analysis_mode.value}' not found in cache, generating new analysis")
         else:
-            # No suitable cache, proceed with new analysis
-            print(f"[INFO] {cache_metadata['message']}")
-            if cache_metadata.get("available_modes"):
-                print(f"[INFO] Available modes: {cache_metadata['available_modes']}")
-            print(f"[INFO] Starting new analysis in mode '{analysis_mode.value}'")
+            # Video not in database at all
+            print(f"[INFO] No cache found for video {video_id}, starting new analysis")
 
     # Step 2: Extract transcript
     transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)
@@ -276,35 +255,25 @@ async def process_video_with_progress(
     # Step 1.5: Check cache
     if not force_refresh:
         await progress_callback("cache", 10, "Checking for cached analysis...")
-        cache_result = await select_best_cached_analysis(
-            video_id,
-            requested_mode=analysis_mode,
-            max_age_days=CACHE_MAX_AGE_DAYS
-        )
+        all_analyses = await get_available_analyses(video_id)
 
-        cached_content, selected_mode, cache_metadata = cache_result
+        if all_analyses and all_analyses.get("analyses"):
+            # Video exists in database
+            requested_analysis = all_analyses["analyses"].get(analysis_mode.value)
 
-        if cached_content and selected_mode:
-            await progress_callback("cache", 100, "Using cached analysis")
-            result = cached_content.copy()
-            result["cached"] = True
-            result["updated_at"] = cache_metadata.get("updated_at")
-            result["created_at"] = cache_metadata.get("created_at")
-            available_modes = cache_metadata.get("available_modes", [])
-            print(f"[DEBUG] Cache hit - available_modes from metadata: {available_modes}")
-            result["cache_info"] = {
-                "reason": cache_metadata["reason"],
-                "message": cache_metadata["message"],
-                "selected_mode": selected_mode.value,
-                "requested_mode": analysis_mode.value,
-                "age_days": cache_metadata.get("age_days", 0),
-                "average_rating": cache_metadata.get("rating", 0.0),
-                "rating_count": cache_metadata.get("rating_count", 0),
-                "updated_at": cache_metadata.get("updated_at"),
-                "created_at": cache_metadata.get("created_at"),
-                "available_analyses": available_modes
-            }
-            return result
+            if requested_analysis and requested_analysis.get("status") == "completed":
+                # Requested mode is available - return all analyses
+                await progress_callback("cache", 100, "Using cached analysis")
+                result = all_analyses.copy()
+                result["cached"] = True
+                print(f"[DEBUG] Returning all analyses: {list(result['analyses'].keys())}")
+                return result
+            else:
+                # Requested mode not available, need to generate it
+                await progress_callback("cache", 15, f"Mode '{analysis_mode.value}' not cached, generating...")
+        else:
+            # Video not in database at all
+            await progress_callback("cache", 15, "No cache found, starting new analysis...")
 
     # Step 2: Extract transcript
     await progress_callback("transcript", 15, "Extracting video transcript...")

@@ -52,8 +52,6 @@ class VideoAnalysis(BaseModel):
     {
         "_id": "video_id_here",
         "youtube_url": "https://...",
-        "created_at": "2025-12-06T10:00:00",
-        "updated_at": "2025-12-06T11:00:00",
         "analyses": {
             "simple": {
                 "status": "completed",
@@ -71,8 +69,6 @@ class VideoAnalysis(BaseModel):
     """
     id: str = Field(alias="_id", description="YouTube video ID")
     youtube_url: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
     analyses: Dict[str, Optional[AnalysisData]] = Field(default_factory=dict)
 
     class Config:
@@ -86,8 +82,6 @@ class VideoAnalysis(BaseModel):
             "example": {
                 "_id": "dQw4w9WgXcQ",
                 "youtube_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                "created_at": "2025-12-06T10:00:00Z",
-                "updated_at": "2025-12-06T10:00:00Z",
                 "analyses": {
                     "simple": {
                         "status": "completed",
@@ -109,7 +103,6 @@ class VideoAnalysis(BaseModel):
     def set_analysis(self, mode: AnalysisMode, data: AnalysisData) -> None:
         """Set analysis for specific mode."""
         self.analyses[mode.value] = data
-        self.updated_at = datetime.utcnow()
 
     def get_available_modes(self) -> List[AnalysisMode]:
         """Get list of completed analysis modes."""
@@ -155,7 +148,5 @@ class VideoAnalysis(BaseModel):
         return cls(
             id=legacy_doc["id"],
             youtube_url=legacy_doc["youtube_url"],
-            created_at=legacy_doc.get("created_at", datetime.utcnow()),
-            updated_at=legacy_doc.get("updated_at", datetime.utcnow()),
             analyses={mode: analysis_data}
         )
