@@ -411,7 +411,7 @@ async def get_available_analyses_endpoint(video_id: str):
             if analysis_dict is None:
                 continue
 
-            # Parse timestamps safely
+            # Parse updated_at timestamp safely
             updated_at = analysis_dict.get("updated_at")
             if isinstance(updated_at, str):
                 updated_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
@@ -420,6 +420,13 @@ async def get_available_analyses_endpoint(video_id: str):
 
             age_days = (now - updated_at).days
 
+            # Parse created_at timestamp safely
+            created_at = analysis_dict.get("created_at")
+            if isinstance(created_at, str):
+                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            elif not isinstance(created_at, datetime):
+                created_at = updated_at
+
             # Get content
             content = analysis_dict.get("content", {})
             arguments_count = len(content.get("arguments", [])) if content else 0
@@ -427,8 +434,8 @@ async def get_available_analyses_endpoint(video_id: str):
             available_analyses_list.append(AvailableAnalysis(
                 analysis_mode=mode,
                 age_days=age_days,
-                created_at=analysis_dict.get("created_at"),
-                updated_at=analysis_dict.get("updated_at"),
+                created_at=created_at.isoformat() if created_at else "",
+                updated_at=updated_at.isoformat() if updated_at else "",
                 average_rating=analysis_dict.get("average_rating", 0.0),
                 rating_count=analysis_dict.get("rating_count", 0),
                 arguments_count=arguments_count,

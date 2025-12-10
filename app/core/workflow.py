@@ -36,6 +36,7 @@ from app.core.parallel_research import research_all_arguments_parallel
 
 
 from app.services.storage import save_analysis, get_available_analyses
+from app.utils.analysis_metadata import build_available_analyses_metadata
 from app.constants import (
     AnalysisMode,
     TRANSCRIPT_MIN_LENGTH
@@ -172,46 +173,11 @@ async def process_video(
 
         # After save, fetch available analyses to include in response
         from datetime import datetime
-        from app.constants import AnalysisStatus
         available_data = await get_available_analyses(video_id)
         if available_data:
             print(f"[DEBUG] available_data.analyses keys: {available_data.get('analyses', {}).keys()}")
             # Build available_analyses array with metadata
-            available_analyses = []
-            for mode_str, analysis_data in available_data.get("analyses", {}).items():
-                if analysis_data:
-                    status = analysis_data.get("status")
-                    print(f"[DEBUG] Mode {mode_str}: status={status}, type={type(status)}")
-
-                    # Status can be enum or string depending on serialization
-                    status_value = status.value if hasattr(status, 'value') else status
-
-                    if status_value == "completed":
-                        updated_at = analysis_data.get("updated_at")
-                        age_days = 0
-
-                        # Handle both string and datetime objects
-                        if updated_at:
-                            if isinstance(updated_at, str):
-                                try:
-                                    dt = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
-                                    age_days = (datetime.utcnow() - dt).days
-                                except Exception as e:
-                                    print(f"[WARN] Could not parse date {updated_at}: {e}")
-                            elif isinstance(updated_at, datetime):
-                                age_days = (datetime.utcnow() - updated_at).days
-
-                        # Ensure updated_at is a string for JSON serialization
-                        updated_at_str = updated_at.isoformat() if isinstance(updated_at, datetime) else updated_at
-
-                        available_analyses.append({
-                            "mode": mode_str,
-                            "age_days": age_days,
-                            "updated_at": updated_at_str,
-                            "average_rating": analysis_data.get("average_rating", 0.0),
-                            "rating_count": analysis_data.get("rating_count", 0)
-                        })
-                        print(f"[DEBUG] Added mode {mode_str} to available_analyses")
+            available_analyses = build_available_analyses_metadata(available_data)
 
             # Add cache_info to result
             print(f"[DEBUG] Final available_analyses count: {len(available_analyses)}")
@@ -357,46 +323,11 @@ async def process_video_with_progress(
 
         # After save, fetch available analyses to include in response
         from datetime import datetime
-        from app.constants import AnalysisStatus
         available_data = await get_available_analyses(video_id)
         if available_data:
             print(f"[DEBUG] available_data.analyses keys: {available_data.get('analyses', {}).keys()}")
             # Build available_analyses array with metadata
-            available_analyses = []
-            for mode_str, analysis_data in available_data.get("analyses", {}).items():
-                if analysis_data:
-                    status = analysis_data.get("status")
-                    print(f"[DEBUG] Mode {mode_str}: status={status}, type={type(status)}")
-
-                    # Status can be enum or string depending on serialization
-                    status_value = status.value if hasattr(status, 'value') else status
-
-                    if status_value == "completed":
-                        updated_at = analysis_data.get("updated_at")
-                        age_days = 0
-
-                        # Handle both string and datetime objects
-                        if updated_at:
-                            if isinstance(updated_at, str):
-                                try:
-                                    dt = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
-                                    age_days = (datetime.utcnow() - dt).days
-                                except Exception as e:
-                                    print(f"[WARN] Could not parse date {updated_at}: {e}")
-                            elif isinstance(updated_at, datetime):
-                                age_days = (datetime.utcnow() - updated_at).days
-
-                        # Ensure updated_at is a string for JSON serialization
-                        updated_at_str = updated_at.isoformat() if isinstance(updated_at, datetime) else updated_at
-
-                        available_analyses.append({
-                            "mode": mode_str,
-                            "age_days": age_days,
-                            "updated_at": updated_at_str,
-                            "average_rating": analysis_data.get("average_rating", 0.0),
-                            "rating_count": analysis_data.get("rating_count", 0)
-                        })
-                        print(f"[DEBUG] Added mode {mode_str} to available_analyses")
+            available_analyses = build_available_analyses_metadata(available_data)
 
             # Add cache_info to result
             print(f"[DEBUG] Final available_analyses count: {len(available_analyses)}")
