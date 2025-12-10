@@ -123,7 +123,7 @@ async function init() {
 /**
  * Lance une analyse de vidéo
  */
-async function analyzeVideo(forceRefresh = false) {
+export async function analyzeVideo(forceRefresh = false) {
     try {
         // Reset UI
         UI.hideAnalysisStatus();
