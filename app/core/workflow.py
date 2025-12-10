@@ -182,6 +182,13 @@ async def process_video(
             # Add cache_info to result
             print(f"[DEBUG] Final available_analyses count: {len(available_analyses)}")
             print(f"[DEBUG] Final available_analyses: {available_analyses}")
+
+            # Ensure timestamps are serializable
+            updated_at = available_data.get("updated_at")
+            created_at = available_data.get("created_at")
+            updated_at_str = updated_at.isoformat() if isinstance(updated_at, datetime) else updated_at
+            created_at_str = created_at.isoformat() if isinstance(created_at, datetime) else created_at
+
             result["cache_info"] = {
                 "reason": "new_analysis",
                 "message": f"New analysis created in mode '{analysis_mode.value}'",
@@ -190,8 +197,8 @@ async def process_video(
                 "age_days": 0,
                 "average_rating": 0.0,
                 "rating_count": 0,
-                "updated_at": available_data.get("updated_at"),
-                "created_at": available_data.get("created_at"),
+                "updated_at": updated_at_str,
+                "created_at": created_at_str,
                 "available_analyses": available_analyses
             }
     except Exception as e:
@@ -332,6 +339,13 @@ async def process_video_with_progress(
             # Add cache_info to result
             print(f"[DEBUG] Final available_analyses count: {len(available_analyses)}")
             print(f"[DEBUG] Final available_analyses: {available_analyses}")
+
+            # Ensure timestamps are serializable
+            updated_at = available_data.get("updated_at")
+            created_at = available_data.get("created_at")
+            updated_at_str = updated_at.isoformat() if isinstance(updated_at, datetime) else updated_at
+            created_at_str = created_at.isoformat() if isinstance(created_at, datetime) else created_at
+
             result["cache_info"] = {
                 "reason": "new_analysis",
                 "message": f"New analysis created in mode '{analysis_mode.value}'",
@@ -340,8 +354,8 @@ async def process_video_with_progress(
                 "age_days": 0,
                 "average_rating": 0.0,
                 "rating_count": 0,
-                "updated_at": available_data.get("updated_at"),
-                "created_at": available_data.get("created_at"),
+                "updated_at": updated_at_str,
+                "created_at": created_at_str,
                 "available_analyses": available_analyses
             }
     except Exception as e:
