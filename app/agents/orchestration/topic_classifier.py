@@ -16,9 +16,9 @@ from ...prompts import JSON_OUTPUT_STRICT
 # ============================================================================
 
 # Mapping of categories to appropriate research agents
-# Only academic and official statistical sources - no general web search
+# Includes academic, official statistical, news, and fact-check sources
 CATEGORY_AGENTS_MAP = {
-    "medicine": ["pubmed", "semantic_scholar", "crossref"],
+    "medicine": ["pubmed", "semantic_scholar", "crossref", "google_factcheck"],
     "biology": ["pubmed", "semantic_scholar", "crossref", "arxiv"],
     "economics": ["oecd", "world_bank", "semantic_scholar", "crossref"],
     "physics": ["arxiv", "semantic_scholar", "crossref"],
@@ -28,7 +28,9 @@ CATEGORY_AGENTS_MAP = {
     "social_sciences": ["semantic_scholar", "crossref", "oecd"],
     "psychology": ["pubmed", "semantic_scholar", "crossref"],
     "education": ["semantic_scholar", "crossref", "oecd"],
-    "politics": ["semantic_scholar", "crossref"],
+    "politics": ["semantic_scholar", "crossref", "newsapi", "gnews"],
+    "current_events": ["newsapi", "gnews", "google_factcheck", "semantic_scholar"],
+    "fact_check": ["google_factcheck", "claimbuster", "semantic_scholar"],
     "general": ["semantic_scholar", "crossref"]
 }
 
@@ -39,6 +41,7 @@ AVAILABLE_CATEGORIES = [
     "physics", "computer_science", "mathematics",
     "environment",
     "social_sciences", "education", "politics",
+    "current_events", "fact_check",
     "general"
 ]
 
@@ -55,6 +58,8 @@ PRIORITY_AGENT_MAP = {
     "social_sciences": "semantic_scholar",
     "education": "semantic_scholar",
     "politics": "semantic_scholar",
+    "current_events": "newsapi",
+    "fact_check": "google_factcheck",
     "general": "semantic_scholar"
 }
 
@@ -77,11 +82,13 @@ If the argument touches multiple domains, list them in order of relevance.
 If no specific category matches, use "general".
 
 Examples:
-- "Le café augmente les risques de cancer" → ["medicine"]
+- "Le café augmente les risques de cancer" → ["medicine", "fact_check"]
 - "Le PIB français augmente" → ["economics"]
 - "Les trous noirs émettent des radiations" → ["physics"]
 - "Python est meilleur que Java" → ["computer_science"]
 - "Le réchauffement climatique menace la biodiversité" → ["environment", "biology"]
+- "Le président a annoncé de nouvelles mesures hier" → ["current_events", "politics"]
+- "Cette affirmation a été démentie par les experts" → ["fact_check"]
 
 {json_instruction}
 

@@ -69,6 +69,21 @@ Generate search queries for these sources:
    - Be comprehensive but focused
    - Include key concepts and related terms
 
+6. NewsAPI / GNews:
+   - Current events and news topics ONLY
+   - Use keywords for recent events
+   - If not newsworthy, return empty string ""
+
+7. Google Fact Check:
+   - Specific claims that can be verified
+   - Use the full claim text
+   - Focus on factual statements
+
+8. ClaimBuster:
+   - Full sentence factual claims
+   - Use complete sentences from the argument
+   - Focus on checkworthy statements
+
 Also provide fallback queries (alternatives if primary query fails) for each agent.
 
 {json_instruction}
@@ -142,6 +157,30 @@ class QueryGenerator:
             "style": "Economic/development indicators",
             "length": "2-4 keywords",
             "example": "poverty rate income inequality"
+        },
+        "newsapi": {
+            "language": "English",
+            "style": "News keywords, current events",
+            "length": "3-6 keywords",
+            "example": "climate change policy announcement"
+        },
+        "gnews": {
+            "language": "English",
+            "style": "News keywords, recent events",
+            "length": "3-6 keywords",
+            "example": "vaccine mandate government decision"
+        },
+        "google_factcheck": {
+            "language": "English",
+            "style": "Specific claim or statement",
+            "length": "5-10 words",
+            "example": "coffee causes cancer health claim"
+        },
+        "claimbuster": {
+            "language": "English",
+            "style": "Factual claim to verify",
+            "length": "Full sentence",
+            "example": "The unemployment rate decreased by 2% last year"
         }
     }
 

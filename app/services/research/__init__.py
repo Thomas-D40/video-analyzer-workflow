@@ -5,6 +5,8 @@ This package contains API clients for various research databases:
 - Medical/Biomedical: PubMed, Europe PMC
 - Academic: ArXiv, Semantic Scholar, CrossRef, CORE, DOAJ
 - Statistical: OECD, World Bank
+- News: NewsAPI, GNews
+- Fact-Check: Google Fact Check, ClaimBuster
 
 Note: These are NOT LLM-based agents - they are pure API clients.
 Query generation is handled by app.agents.orchestration.query_generator.
@@ -18,6 +20,10 @@ from .oecd import search_oecd_data
 from .core import search_core
 from .doaj import search_doaj
 from .europepmc import search_europepmc
+from .news import search_newsapi
+from .gnews import search_gnews
+from .factcheck import search_google_factcheck
+from .claimbuster import search_claimbuster, score_claim_claimbuster
 
 __all__ = [
     "search_arxiv",
@@ -29,4 +35,9 @@ __all__ = [
     "search_core",
     "search_doaj",
     "search_europepmc",
+    "search_newsapi",
+    "search_gnews",
+    "search_google_factcheck",
+    "search_claimbuster",
+    "score_claim_claimbuster",
 ]

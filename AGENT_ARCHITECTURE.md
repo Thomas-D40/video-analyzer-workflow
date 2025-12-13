@@ -6,13 +6,13 @@ The video analyzer uses a multi-agent architecture organized into four main cate
 
 ```
 app/agents/
-├── extraction/      # Extract information from video transcripts
-├── enrichment/      # Enhance search results with AI screening
-├── orchestration/   # Coordinate and optimize agent selection
-└── analysis/        # Analyze and aggregate results
+├── extraction/      # Extract arguments from transcripts
+├── enrichment/      # Relevance screening & full-text fetching
+├── orchestration/   # Topic classification & query optimization
+└── analysis/        # Pros/cons extraction & reliability scoring
 
 app/services/
-└── research/        # Pure data fetchers for external sources
+└── research/        # Pure API clients (no LLM)
 ```
 
 ## 1. Extraction Agents
@@ -28,7 +28,26 @@ Extract structured information from video transcripts.
   - Filters out opinions, metaphors, and trivial statements
   - Returns arguments with stance detection (affirmative/conditional)
 
-## 2. Research Services
+## 2. Enrichment Agents
+
+**Location**: `app/agents/enrichment/`
+
+### Purpose
+Optimize research quality by filtering sources and fetching full-text content.
+
+### Agents
+
+- `screen_sources_by_relevance()` - AI-powered relevance filtering
+  - Uses GPT-4o-mini to score source relevance
+  - Selects top N sources for full-text retrieval
+  - Returns: (selected_sources, rejected_sources)
+
+- `fetch_fulltext()` - Full-text content retrieval
+  - Fetches complete article text from URLs
+  - Supports multiple content types
+  - Returns: Enhanced sources with full_text field
+
+## 3. Research Services
 
 **Location**: `app/services/research/`
 
@@ -68,6 +87,32 @@ Pure data fetchers that retrieve information from external APIs. Each service sp
   - Returns: 2M+ articles from vetted open access journals
   - Access: Always open access with full text availability
 
+#### **News & Current Events**
+- `search_newsapi(query, max_results, days_back)` ⭐ **NEW**
+  - Domain: Current events and news
+  - Source: NewsAPI
+  - Returns: Recent news articles from thousands of sources
+  - Access: News articles with external links
+
+- `search_gnews(query, max_results)` ⭐ **NEW**
+  - Domain: Current events and news (alternative to NewsAPI)
+  - Source: GNews API
+  - Returns: Recent news articles
+  - Access: News articles with external links
+
+#### **Fact-Checking**
+- `search_google_factcheck(query, max_results)` ⭐ **NEW**
+  - Domain: Fact-checked claims
+  - Source: Google Fact Check Tools API
+  - Returns: Claims verified by fact-checking organizations
+  - Access: Fact-check articles with ratings
+
+- `search_claimbuster(query, max_results, min_score)` ⭐ **NEW**
+  - Domain: Claim detection and verification
+  - Source: ClaimBuster API
+  - Returns: Checkworthy claims with scores
+  - Access: AI-detected claims for verification
+
 #### **Medical & Health**
 - `search_pubmed(query, max_results)`
   - Domain: Medicine, Biology, Health
@@ -106,7 +151,7 @@ Pure data fetchers that retrieve information from external APIs. Each service sp
 4. **Rate Limiting**: Respect API quotas
 5. **Retry Logic**: Exponential backoff for transient errors
 
-## 3. Orchestration Agents
+## 4. Orchestration Agents
 
 **Location**: `app/agents/orchestration/`
 
@@ -127,7 +172,6 @@ Coordinate research agents by determining which agents to use and how to optimiz
   - Returns: Dict mapping agent name to query string
   - **NEW**: Confidence scoring per query
   - **NEW**: Fallback queries if primary fails
-  - **REMOVED**: web_query (no more web search)
 
 #### **Topic Classifier**
 - `classify_argument_topic(argument)`
@@ -151,7 +195,7 @@ Coordinate research agents by determining which agents to use and how to optimiz
 3. **Multi-Domain Support**: Handle cross-disciplinary arguments
 4. **Fallback Strategies**: Always provide alternatives
 
-## 4. Analysis Agents
+## 5. Analysis Agents
 
 **Location**: `app/agents/analysis/`
 
@@ -204,10 +248,10 @@ Analyze collected sources and calculate reliability scores.
    │
    ├─ Execute Searches [research/*.py] (PARALLEL)
    │   ├─ PubMed (if medical)
-   │   ├─ Europe PMC (if medical) ⭐ NEW
+   │   ├─ Europe PMC (if medical)
    │   ├─ ArXiv (if scientific)
-   │   ├─ CORE (if scientific) ⭐ NEW
-   │   ├─ DOAJ (if scientific) ⭐ NEW
+   │   ├─ CORE (if scientific)
+   │   ├─ DOAJ (if scientific)
    │   ├─ OECD (if economic)
    │   ├─ World Bank (if economic)
    │   ├─ Semantic Scholar (always)
@@ -252,13 +296,9 @@ def fetch_data():
 - `PermanentAPIError`: Don't retry
 - `RateLimitError`: Wait and retry
 
-## Key Improvements
-
 ### What Changed
 
 1. **Removed Web Search**
-   - ❌ Deleted `web.py` (DuckDuckGo)
-   - ✅ Better source quality
 
 2. **Created Orchestration Layer**
    - ✅ Moved `query_generator.py` from research/ to orchestration/
@@ -285,20 +325,6 @@ def fetch_data():
    - Circuit breakers
    - Rate limiting
    - Graceful degradation
-
-### What Was Removed
-
-1. **Caching System** (`app/utils/caching.py`)
-   - Rationale: Each video analyzed once, no reuse
-   - Benefit: Simpler codebase
-
-2. **Web Search** (previously at `app/agents/research/web.py`, now removed)
-   - Rationale: Low-quality results
-   - Benefit: Higher quality analysis
-
-3. **Workflow Helpers** (`app/core/workflow_helpers.py`)
-   - Rationale: Over-engineered
-   - Benefit: Simpler workflow
 
 ## Testing
 
@@ -368,8 +394,8 @@ pip install openai>=1.51.0      # Query generation & analysis
 ## Future Enhancements
 
 ### High Priority
-1. Add **News APIs** for current events (NewsAPI, GNews)
-2. Add **Fact-check APIs** (Google Fact Check, ClaimBuster)
+1. ✅ **COMPLETED**: News APIs (NewsAPI, GNews)
+2. ✅ **COMPLETED**: Fact-check APIs (Google Fact Check, ClaimBuster)
 
 ### Medium Priority
 4. Add **Eurostat API** for European statistics

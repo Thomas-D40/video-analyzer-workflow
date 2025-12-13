@@ -18,14 +18,20 @@ Créez un fichier `.env` à la racine du projet avec le contenu suivant:
 
 ```env
 DATABASE_URL=mongodb://mongo:27017
-
 OPENAI_API_KEY=votre_clé_openai_ici
 ENV=development
+
+# Optional: News & Fact-Check APIs
+NEWSAPI_KEY=votre_clé_newsapi
+GNEWS_API_KEY=votre_clé_gnews
+GOOGLE_FACTCHECK_API_KEY=votre_clé_google
+CLAIMBUSTER_API_KEY=votre_clé_claimbuster
 ```
 
 **Note importante**:
 
 - `OPENAI_API_KEY` est **requis** pour l'extraction d'arguments
+- Les autres clés sont optionnelles (services sautés si non configurés)
 
 ### 2. Lancer les services Docker
 
@@ -65,6 +71,22 @@ Réponse attendue:
 - Si première analyse: `{"video_id": "...", "status": "queued", "result": null}`
 - Si déjà analysé: `{"video_id": "...", "status": "completed", "result": {"arguments": [...]}}`
 
+### 5. Tester les services de recherche
+
+```bash
+# Test all research APIs
+python tests/test_research_services.py
+
+# Test specific category
+python tests/test_research_services.py --category news
+python tests/test_research_services.py --category factcheck
+
+# Verbose output
+python tests/test_research_services.py -v
+```
+
+See `tests/README.md` for details.
+
 ## Configuration
 
 - Variables dans `.env` (voir `.env.example`):
@@ -84,18 +106,18 @@ graph TD
 
     Classify --> Strategy{Determine<br/>Research Strategy}
 
-    Strategy -->|Medicine| MedAgents[PubMed + Semantic Scholar<br/>+ CrossRef]
-    Strategy -->|Biology| BioAgents[PubMed + Semantic Scholar<br/>+ CrossRef + ArXiv]
-    Strategy -->|Economics| EconAgents[OECD + World Bank<br/>+ Semantic Scholar + CrossRef]
-    Strategy -->|Physics/CS/Math| SciAgents[ArXiv + Semantic Scholar<br/>+ CrossRef]
-    Strategy -->|Environment| EnvAgents[ArXiv + Semantic Scholar<br/>+ CrossRef + OECD]
+    Strategy -->|Medicine| MedAgents[PubMed + Europe PMC<br/>+ Fact-Check APIs]
+    Strategy -->|Economics| EconAgents[OECD + World Bank<br/>+ Semantic Scholar]
+    Strategy -->|Physics/CS/Math| SciAgents[ArXiv + Semantic Scholar<br/>+ CORE + DOAJ]
+    Strategy -->|Current Events| NewsAgents[NewsAPI + GNews<br/>+ Fact-Check APIs]
+    Strategy -->|Fact-Check| FactAgents[Google Fact Check<br/>+ ClaimBuster]
     Strategy -->|General| GenAgents[Semantic Scholar<br/>+ CrossRef]
 
     MedAgents --> QueryGen[Generate Queries<br/>GPT-4o-mini]
-    BioAgents --> QueryGen
     EconAgents --> QueryGen
     SciAgents --> QueryGen
-    EnvAgents --> QueryGen
+    NewsAgents --> QueryGen
+    FactAgents --> QueryGen
     GenAgents --> QueryGen
 
     QueryGen --> Search[Execute Searches<br/>in Parallel]

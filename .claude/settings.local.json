@@ -29,7 +29,8 @@
       "Bash(ls:*)",
       "Bash(PYTHONPATH=/mnt/e/Développement/video-analyzer-workflow python3:*)",
       "Bash(git restore:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(claude mcp add:*)"
     ],
     "deny": [],
     "ask": []

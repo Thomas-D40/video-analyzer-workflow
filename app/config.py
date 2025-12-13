@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     allowed_api_keys: str = ""
     admin_password: Optional[str] = None
 
+    # News & Fact-Check APIs
+    newsapi_key: Optional[str] = None
+    gnews_api_key: Optional[str] = None
+    google_factcheck_api_key: Optional[str] = None
+    claimbuster_api_key: Optional[str] = None
+
     # Enrichment - Smart Full-Text Filtering
     mcp_web_fetch_enabled: bool = Field(
         default=False,
