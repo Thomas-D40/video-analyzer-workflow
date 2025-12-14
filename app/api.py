@@ -237,6 +237,13 @@ async def analyze_video(request: AnalyzeRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'analyse: {str(e)}")
+    
+
+def normalize_event(event: dict) -> dict:
+    return {
+        k: (v.isoformat() if isinstance(v, datetime) else v)
+        for k, v in event.items()
+    }   
 
 
 @app.post("/api/analyze/stream", dependencies=[Depends(verify_api_key)])
@@ -326,7 +333,7 @@ async def analyze_video_stream(request: AnalyzeRequest):
                 event = await progress_queue.get()
                 if event is None:  # End signal
                     break
-                yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {json.dumps(normalize_event(event))}\n\n"
         finally:
             # Ensure task is cleaned up
             if not analysis_task.done():
