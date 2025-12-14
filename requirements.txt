@@ -17,6 +17,7 @@ youtube-transcript-api==0.6.2
 # AI & LLM
 openai==1.51.0
 tiktoken==0.7.0
+numpy>=1.24.0  # For embeddings similarity in consolidator
 
 # Research & Search
 duckduckgo-search>=6.3.0
