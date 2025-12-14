@@ -9,19 +9,25 @@ All prompts and definitions for the multi-stage extraction process.
 # ============================================================================
 
 EXPLANATORY_ARGUMENT_DEFINITION = """
-An explanatory argument must satisfy ALL criteria:
+An explanatory argument must satisfy AT LEAST ONE of these criteria:
 
 1. **Causal/Logical relationship**: Asserts WHY or HOW something happens/works
-2. **Mechanistic explanation**: Describes the process, mechanism, or reasoning
-3. **Presented as necessary**: Author claims this is needed to understand the phenomenon
+2. **Mechanistic explanation**: Describes the process, mechanism, or reasoning chain
+3. **Substantive claim**: Makes a significant factual or theoretical assertion
 
 IMPORTANT - Do NOT extract:
-- Simple descriptions (what happened, what exists)
-- Narrative steps (then X did Y, next we see Z)
-- Examples or illustrations without causal reasoning
-- Rhetorical questions
-- Opinions without mechanistic reasoning
-- Statistical observations without explanation
+- Simple descriptions without explanation (e.g., "The sky is blue")
+- Pure narrative steps (then X did Y, next we see Z)
+- Rhetorical questions without assertions
+- Vague opinions without reasoning (e.g., "I think it's interesting")
+- Basic statistics without context (e.g., "50% of people...")
+
+ACCEPT - These ARE valid explanatory arguments:
+- Causal claims (e.g., "X causes Y because...")
+- Mechanism descriptions (e.g., "The process works by...")
+- Scientific claims (e.g., "Coffee contains polyphenols that inhibit...")
+- Theoretical assertions (e.g., "Dark matter affects galaxy rotation")
+- Explanatory hypotheses (e.g., "This might occur due to...")
 """
 
 # ============================================================================
@@ -136,7 +142,7 @@ Translate this argument to {target_language}.
 # VALIDATION PROMPTS (AXIS 4)
 # ============================================================================
 
-VALIDATION_SYSTEM_PROMPT = "You are a strict validator of explanatory arguments."
+VALIDATION_SYSTEM_PROMPT = "You are an argument validator. Accept arguments that explain, assert causation, or make substantive claims. Reject only trivial descriptions or pure narration."
 
 VALIDATION_USER_PROMPT = """
 {definition}
@@ -145,10 +151,13 @@ Does this extracted text qualify as an explanatory argument according to the def
 
 **Text:** "{argument}"
 
-Evaluate:
-1. Does it assert a causal/logical relationship? (Yes/No + why)
-2. Does it describe a mechanism/process? (Yes/No + why)
-3. Is it presented as necessary for understanding? (Yes/No + why)
+Evaluate whether it meets AT LEAST ONE of these criteria:
+1. Does it assert a causal/logical relationship (WHY/HOW)? (Yes/No)
+2. Does it describe a mechanism/process/reasoning? (Yes/No)
+3. Does it make a substantive factual or theoretical claim? (Yes/No)
+
+**Important:** An argument is VALID if it meets ANY of these criteria.
+It is INVALID only if it's purely descriptive, narrative, or trivial.
 
 {json_instruction}
 
@@ -157,8 +166,8 @@ Evaluate:
   "is_valid": true/false,
   "meets_causal_criterion": true/false,
   "meets_mechanistic_criterion": true/false,
-  "meets_necessity_criterion": true/false,
-  "reasoning": "Brief explanation"
+  "meets_substantive_criterion": true/false,
+  "reasoning": "Brief explanation of why it's valid or invalid"
 }}}}
 """
 

@@ -140,7 +140,7 @@ def validate_with_details(argument: str) -> Dict:
             "is_valid": bool,
             "meets_causal_criterion": bool,
             "meets_mechanistic_criterion": bool,
-            "meets_necessity_criterion": bool,
+            "meets_substantive_criterion": bool,
             "reasoning": str
         }
 
@@ -156,7 +156,7 @@ def validate_with_details(argument: str) -> Dict:
             "is_valid": True,
             "meets_causal_criterion": True,
             "meets_mechanistic_criterion": True,
-            "meets_necessity_criterion": True,
+            "meets_substantive_criterion": True,
             "reasoning": "Validation skipped (no API key)"
         }
 
@@ -193,9 +193,9 @@ def validate_with_details(argument: str) -> Dict:
 
 def filter_by_criteria(
     arguments: List[Dict],
-    require_causal: bool = True,
-    require_mechanistic: bool = True,
-    require_necessity: bool = False
+    require_causal: bool = False,
+    require_mechanistic: bool = False,
+    require_substantive: bool = False
 ) -> List[Dict]:
     """
     Filter arguments by specific criteria.
@@ -206,7 +206,7 @@ def filter_by_criteria(
         arguments: List of arguments
         require_causal: Require causal/logical relationship
         require_mechanistic: Require mechanism description
-        require_necessity: Require necessity claim
+        require_substantive: Require substantive claim
 
     Returns:
         Filtered list of arguments
@@ -225,7 +225,7 @@ def filter_by_criteria(
             meets_requirements = False
         if require_mechanistic and not details.get("meets_mechanistic_criterion"):
             meets_requirements = False
-        if require_necessity and not details.get("meets_necessity_criterion"):
+        if require_substantive and not details.get("meets_substantive_criterion"):
             meets_requirements = False
 
         if meets_requirements:
