@@ -240,11 +240,19 @@ async def analyze_video(request: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'analyse: {str(e)}")
     
 
-def normalize_event(event: dict) -> dict:
-    return {
-        k: (v.isoformat() if isinstance(v, datetime) else v)
-        for k, v in event.items()
-    }   
+def normalize_event(obj):
+    """
+    Recursively convert datetime objects to ISO format strings for JSON serialization.
+    Handles nested dictionaries and lists.
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {k: normalize_event(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [normalize_event(item) for item in obj]
+    else:
+        return obj   
 
 
 @app.post("/api/analyze/stream", dependencies=[Depends(verify_api_key)])
