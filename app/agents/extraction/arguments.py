@@ -27,7 +27,7 @@ from .consolidator import consolidate_arguments
 from .hierarchy import build_hierarchy
 from .translator import translate_arguments
 from .validators import validate_arguments
-from .tree_builder import build_reasoning_trees, ArgumentStructure, structure_to_dict
+from .tree_builder import build_reasoning_trees, ArgumentStructure
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +232,7 @@ def extract_thesis_arguments_only(
     from .tree_builder import ReasoningChain, ThesisNode
 
     thesis_only_chains = []
-    for chain in forest.reasoning_chains:
+    for chain in structure.reasoning_chains:
         # Create thesis with empty sub-arguments and counter-arguments
         thesis_only = ThesisNode(
             argument=chain.thesis.argument,
