@@ -41,15 +41,16 @@ def build_hierarchy(arguments: List[Dict]) -> List[Dict]:
     Build argumentative hierarchy from flat list.
 
     Process:
-    1. Classify role for each argument
-    2. Identify parent-child relationships
-    3. Add hierarchy metadata
+    1. Assign explicit IDs to each argument
+    2. Classify role for each argument
+    3. Identify parent-child relationships
+    4. Add hierarchy metadata
 
     Args:
         arguments: List of arguments (consolidated, unique)
 
     Returns:
-        List of arguments with role and parent_id fields
+        List of arguments with id, role and parent_id fields
 
     Example:
         >>> hierarchical = build_hierarchy(arguments)
@@ -60,6 +61,13 @@ def build_hierarchy(arguments: List[Dict]) -> List[Dict]:
         return []
 
     logger.info(f"[Hierarchy] Building hierarchy for {len(arguments)} arguments")
+
+    # Assign explicit IDs to all arguments
+    for i, arg in enumerate(arguments):
+        arg["id"] = i
+
+    # Pre-compute embeddings for all arguments (for efficient parent matching)
+    arg_embeddings = _get_argument_embeddings(arguments)
 
     # Classify all arguments
     for i, arg in enumerate(arguments):
@@ -77,14 +85,21 @@ def build_hierarchy(arguments: List[Dict]) -> List[Dict]:
         arg["confidence"] = role_data.get("confidence", 0.5)
 
         # Find parent if applicable
-        if arg["role"] in [ArgumentRole.SUB_ARGUMENT.value, ArgumentRole.EVIDENCE.value]:
+        if arg["role"] in [ArgumentRole.SUB_ARGUMENT.value, ArgumentRole.EVIDENCE.value, ArgumentRole.COUNTER_ARGUMENT.value]:
             parent_text = role_data.get("parent_argument")
-            parent_id = _find_parent_id(parent_text, arguments) if parent_text else None
-            arg["parent_id"] = parent_id
+            parent_index = _find_parent_id_with_embeddings(
+                parent_text, arguments, arg_embeddings
+            ) if parent_text else None
+
+            # Convert index to actual ID
+            if parent_index is not None:
+                arg["parent_id"] = arguments[parent_index]["id"]
+            else:
+                arg["parent_id"] = None
         else:
             arg["parent_id"] = None
 
-        logger.debug(f"[Hierarchy] Argument {i}: role={arg['role']}, parent={arg.get('parent_id')}")
+        logger.debug(f"[Hierarchy] Argument {arg['id']}: role={arg['role']}, parent_id={arg.get('parent_id')}")
 
     # Log summary
     role_counts = _count_roles(arguments)
@@ -160,6 +175,125 @@ def classify_argument_role(
         }
 
 
+def _get_argument_embeddings(arguments: List[Dict]) -> Optional[List]:
+    """
+    Get embeddings for all arguments in batch (efficient).
+
+    Args:
+        arguments: List of arguments
+
+    Returns:
+        List of embeddings or None if failed
+    """
+    try:
+        from openai import OpenAI
+        from ...config import get_settings
+
+        settings = get_settings()
+        if not settings.openai_api_key:
+            return None
+
+        client = OpenAI(api_key=settings.openai_api_key)
+
+        # Batch all argument texts
+        texts = [arg["argument"] for arg in arguments]
+
+        # Get embeddings in one API call
+        response = client.embeddings.create(
+            input=texts,
+            model="text-embedding-3-small"
+        )
+
+        embeddings = [item.embedding for item in response.data]
+        logger.info(f"[Hierarchy] Computed {len(embeddings)} embeddings for parent matching")
+
+        return embeddings
+
+    except Exception as e:
+        logger.warning(f"[Hierarchy] Failed to get embeddings: {e}")
+        return None
+
+
+def _find_parent_id_with_embeddings(
+    parent_text: Optional[str],
+    arguments: List[Dict],
+    arg_embeddings: Optional[List]
+) -> Optional[int]:
+    """
+    Find parent argument ID using pre-computed embeddings.
+
+    Args:
+        parent_text: Text of parent from LLM
+        arguments: All arguments
+        arg_embeddings: Pre-computed embeddings for arguments
+
+    Returns:
+        Parent argument index or None
+    """
+    if not parent_text:
+        return None
+
+    parent_text_clean = parent_text.lower().strip()
+
+    # First try exact text matching (fast path)
+    for i, arg in enumerate(arguments):
+        arg_text_clean = arg["argument"].lower().strip()
+
+        # Exact match
+        if parent_text_clean == arg_text_clean:
+            logger.debug(f"[Hierarchy] Found parent by exact match")
+            return i
+
+        # Bidirectional substring match
+        if parent_text_clean in arg_text_clean or arg_text_clean in parent_text_clean:
+            logger.debug(f"[Hierarchy] Found parent by substring match")
+            return i
+
+    # Try semantic similarity if embeddings available
+    if arg_embeddings:
+        try:
+            from openai import OpenAI
+            from ...config import get_settings
+            import numpy as np
+
+            settings = get_settings()
+            if not settings.openai_api_key:
+                return None
+
+            client = OpenAI(api_key=settings.openai_api_key)
+
+            # Get embedding for parent text
+            parent_response = client.embeddings.create(
+                input=parent_text,
+                model="text-embedding-3-small"
+            )
+            parent_embedding = parent_response.data[0].embedding
+
+            # Find most similar argument
+            best_match_idx = None
+            best_similarity = 0.7  # Minimum threshold
+
+            for i, arg_embedding in enumerate(arg_embeddings):
+                similarity = np.dot(parent_embedding, arg_embedding) / (
+                    np.linalg.norm(parent_embedding) * np.linalg.norm(arg_embedding)
+                )
+
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    best_match_idx = i
+
+            if best_match_idx is not None:
+                logger.info(f"[Hierarchy] Found parent by similarity: {best_similarity:.2f} for '{parent_text[:50]}...'")
+                return best_match_idx
+
+        except Exception as e:
+            logger.warning(f"[Hierarchy] Embeddings matching failed: {e}")
+
+    # No match found
+    logger.warning(f"[Hierarchy] Could not find parent for: '{parent_text[:60]}...'")
+    return None
+
+
 def _get_context_arguments(
     arguments: List[Dict],
     exclude_index: int,
@@ -191,34 +325,6 @@ def _get_context_arguments(
     return context[:max_context]
 
 
-def _find_parent_id(
-    parent_text: Optional[str],
-    arguments: List[Dict]
-) -> Optional[int]:
-    """
-    Find parent argument ID by matching text.
-
-    Args:
-        parent_text: Text of parent argument
-        arguments: All arguments with indices
-
-    Returns:
-        Parent argument index or None
-    """
-    if not parent_text:
-        return None
-
-    # Simple text matching (could be improved with embeddings)
-    parent_text_lower = parent_text.lower().strip()
-
-    for i, arg in enumerate(arguments):
-        arg_text_lower = arg["argument"].lower().strip()
-
-        # Exact match or substring match
-        if parent_text_lower == arg_text_lower or parent_text_lower in arg_text_lower:
-            return i
-
-    return None
 
 
 def _count_roles(arguments: List[Dict]) -> Dict[str, int]:

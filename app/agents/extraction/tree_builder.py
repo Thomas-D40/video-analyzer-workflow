@@ -80,7 +80,7 @@ def build_reasoning_trees(flat_arguments: List[Dict]) -> ArgumentStructure:
     Convert flat list of arguments to nested tree structure.
 
     Args:
-        flat_arguments: List with parent_id relationships
+        flat_arguments: List with id, parent_id relationships
 
     Returns:
         ArgumentStructure with complete trees and orphans
@@ -101,12 +101,12 @@ def build_reasoning_trees(flat_arguments: List[Dict]) -> ArgumentStructure:
 
     logger.info(f"[TreeBuilder] Building trees from {len(flat_arguments)} arguments")
 
-    # Index arguments by ID for quick lookup
-    arg_by_id = {i: arg for i, arg in enumerate(flat_arguments)}
+    # Index arguments by their explicit ID for quick lookup
+    arg_by_id = {arg["id"]: arg for arg in flat_arguments}
 
     # Find all thesis arguments (roots)
     thesis_args = [
-        (i, arg) for i, arg in enumerate(flat_arguments)
+        arg for arg in flat_arguments
         if arg.get("role") == "thesis" or arg.get("parent_id") is None
     ]
 
@@ -116,9 +116,9 @@ def build_reasoning_trees(flat_arguments: List[Dict]) -> ArgumentStructure:
     chains = []
     processed_ids = set()
 
-    for chain_id, (thesis_id, thesis_arg) in enumerate(thesis_args):
+    for chain_id, thesis_arg in enumerate(thesis_args):
         chain = _build_single_chain(
-            thesis_id,
+            thesis_arg["id"],
             thesis_arg,
             arg_by_id,
             processed_ids,
@@ -128,22 +128,42 @@ def build_reasoning_trees(flat_arguments: List[Dict]) -> ArgumentStructure:
             chains.append(chain)
 
     # Find orphaned arguments (not in any tree)
-    orphans = [
-        arg for i, arg in enumerate(flat_arguments)
-        if i not in processed_ids
+    orphan_args = [
+        arg for arg in flat_arguments
+        if arg["id"] not in processed_ids
     ]
 
-    if orphans:
-        logger.warning(f"[TreeBuilder] Found {len(orphans)} orphan arguments")
+    if orphan_args:
+        logger.warning(f"[TreeBuilder] Found {len(orphan_args)} orphan arguments - converting to standalone chains")
+
+        # Convert orphans to standalone thesis arguments (independent claims)
+        for orphan_arg in orphan_args:
+            # Create a standalone reasoning chain (thesis with no sub-arguments)
+            orphan_chain = ReasoningChain(
+                thesis=ThesisNode(
+                    argument=orphan_arg.get("argument", ""),
+                    argument_en=orphan_arg.get("argument_en", ""),
+                    stance=orphan_arg.get("stance", "affirmatif"),
+                    confidence=orphan_arg.get("confidence", 1.0),
+                    sub_arguments=[],
+                    counter_arguments=[]
+                ),
+                chain_id=len(chains),  # Sequential chain numbering
+                total_arguments=1
+            )
+            chains.append(orphan_chain)
+            processed_ids.add(orphan_arg["id"])
+
+            logger.debug(f"[TreeBuilder] Converted orphan to chain: {orphan_arg.get('argument_en', '')[:60]}...")
 
     structure = ArgumentStructure(
         reasoning_chains=chains,
-        orphan_arguments=orphans,
+        orphan_arguments=[],  # No longer needed - all converted to chains
         total_chains=len(chains),
         total_arguments=len(flat_arguments)
     )
 
-    logger.info(f"[TreeBuilder] Built {structure.total_chains} reasoning chains")
+    logger.info(f"[TreeBuilder] Built {structure.total_chains} reasoning chains (including {len(orphan_args)} standalone)")
 
     return structure
 
@@ -159,10 +179,10 @@ def _build_single_chain(
     Build single reasoning chain from thesis.
 
     Args:
-        thesis_id: Thesis argument ID
+        thesis_id: Thesis argument ID (explicit id field)
         thesis_arg: Thesis argument dict
-        arg_by_id: All arguments indexed by ID
-        processed_ids: Set to track processed arguments
+        arg_by_id: All arguments indexed by their id field
+        processed_ids: Set to track processed argument IDs
         chain_id: Chain identifier
 
     Returns:
@@ -171,9 +191,9 @@ def _build_single_chain(
     # Mark thesis as processed
     processed_ids.add(thesis_id)
 
-    # Find children of thesis
+    # Find children of thesis (by matching parent_id to thesis id)
     children = [
-        (i, arg) for i, arg in arg_by_id.items()
+        arg for arg in arg_by_id.values()
         if arg.get("parent_id") == thesis_id
     ]
 
@@ -181,7 +201,8 @@ def _build_single_chain(
     sub_args = []
     counter_args = []
 
-    for child_id, child_arg in children:
+    for child_arg in children:
+        child_id = child_arg["id"]
         processed_ids.add(child_id)
 
         if child_arg.get("role") == "counter_argument":
@@ -233,22 +254,23 @@ def _build_sub_argument_node(
     Build sub-argument node with its evidence children.
 
     Args:
-        sub_id: Sub-argument ID
+        sub_id: Sub-argument ID (explicit id field)
         sub_arg: Sub-argument dict
-        arg_by_id: All arguments
-        processed_ids: Track processed
+        arg_by_id: All arguments indexed by id
+        processed_ids: Track processed IDs
 
     Returns:
         SubArgumentNode with evidence
     """
-    # Find evidence children
+    # Find evidence children (by matching parent_id to sub_id)
     evidence_args = [
-        (i, arg) for i, arg in arg_by_id.items()
+        arg for arg in arg_by_id.values()
         if arg.get("parent_id") == sub_id
     ]
 
     evidence_nodes = []
-    for ev_id, ev_arg in evidence_args:
+    for ev_arg in evidence_args:
+        ev_id = ev_arg["id"]
         processed_ids.add(ev_id)
 
         ev_node = EvidenceNode(

@@ -1388,3 +1388,116 @@ h1 {
     font-weight: 600;
     color: #4a5568;
 }
+
+/* Role Badges - Hierarchical Argument Structure */
+.role-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: transform 0.2s;
+}
+
+.role-thesis {
+    background: #fef5e7;
+    color: #d68910;
+}
+
+.role-sub {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.role-evidence {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.role-counter {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.role-other {
+    background: #f5f5f5;
+    color: #757575;
+}
+
+/* Hierarchical Row Styling */
+.summary-row[data-role="sub_argument"] td {
+    background: #f9fafb;
+}
+
+.summary-row[data-role="evidence"] td {
+    background: #f3f4f6;
+    font-size: 12px;
+}
+
+.summary-row[data-role="counter_argument"] td {
+    background: #fef5f5;
+}
+
+.summary-row.clickable:hover {
+    background: #edf2f7 !important;
+    cursor: pointer;
+}
+
+.summary-row.clickable:hover td {
+    background: #edf2f7 !important;
+}
+
+.role-orphan {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.summary-row[data-role="orphan"] td {
+    background: #fffbf5;
+    border-left: 3px solid #ff9800;
+}
+
+/* Argument Tree Nodes in Detail Cards */
+.arg-tree-node {
+    margin: 8px 0;
+    padding: 8px;
+    background: #f9fafb;
+    border-left: 2px solid #e2e8f0;
+    border-radius: 4px;
+}
+
+.node-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.node-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.node-text {
+    flex: 1;
+    line-height: 1.5;
+    color: #2d3748;
+}
+
+.arg-structure-section {
+    margin-top: 12px;
+}
+
+.research-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.no-structure-msg {
+    opacity: 0.6;
+    font-style: italic;
+    padding: 12px;
+    text-align: center;
+    color: #718096;
+}

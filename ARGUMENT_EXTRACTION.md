@@ -71,15 +71,19 @@ app/agents/extraction/
 - Adds `argument_en` field
 
 ### 6. Hierarchy Building
+- Assigns explicit `id` field to each argument (stable identifiers)
 - Classifies each argument by role: thesis | sub_argument | evidence | counter_argument
-- Identifies parent-child relationships
-- Adds `role` and `parent_id` fields
+- Identifies parent-child relationships using semantic similarity (embeddings)
+- Adds `id`, `role` and `parent_id` fields
 - Uses GPT-4o-mini for classification
+- Uses batch embeddings for efficient parent matching
 
 ### 7. Tree Building
-- Converts flat list with parent_id to nested structure
+- Converts flat list with id/parent_id to nested structure
+- Uses explicit IDs for parent-child matching (robust to reordering)
 - Creates ReasoningChains: thesis → sub_arguments → evidence
 - Returns ArgumentStructure with reasoning_chains array
+- Converts orphaned arguments to standalone reasoning chains
 - Preserves complete argumentative flow
 
 ---
