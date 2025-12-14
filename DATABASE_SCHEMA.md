@@ -66,43 +66,110 @@ Each entry in the `analyses` map follows this structure:
 
 ## Content Structure
 
-The `content` field contains the actual analysis results. Its structure depends on the analysis mode and workflow:
+The `content` field contains the actual analysis results with a hierarchical ArgumentStructure:
 
 ```javascript
 {
-  "transcript": String,              // Video transcript text
-  "arguments": [                     // Extracted arguments
-    {
-      "argument": String,            // Argument statement
-      "stance": String,              // "affirmatif" | "conditionnel"
-      "sources": [                   // Research sources
-        {
-          "title": String,
-          "authors": [String],
-          "url": String,
-          "date": String,
-          "abstract": String,
-          "access_type": String,     // "free" | "restricted" | "paid"
-          "relevance_score": Float,  // 0.0-1.0
-          "pros": [String],          // Supporting evidence
-          "cons": [String]           // Contradicting evidence
+  "video_id": String,
+  "youtube_url": String,
+  "language": String,                        // Detected language ("fr", "en", etc.)
+
+  // New hierarchical argument structure (tree-based)
+  "argument_structure": {
+    "reasoning_chains": [                    // Array of complete reasoning chains
+      {
+        "chain_id": Integer,                 // Chain identifier
+        "total_arguments": Integer,          // Total nodes in this chain
+        "thesis": {                          // Main claim/thesis
+          "argument": String,                // Original language
+          "argument_en": String,             // English translation
+          "stance": String,                  // "affirmatif" | "conditionnel"
+          "confidence": Float,               // 0.0-1.0
+          "sub_arguments": [                 // Supporting sub-arguments
+            {
+              "argument": String,
+              "argument_en": String,
+              "stance": String,
+              "confidence": Float,
+              "evidence": [                  // Specific evidence/examples
+                {
+                  "argument": String,
+                  "argument_en": String,
+                  "stance": String,
+                  "confidence": Float,
+                  "segment_id": Integer,     // Source segment in transcript
+                  "source_language": String
+                }
+              ]
+            }
+          ],
+          "counter_arguments": [             // Counter-arguments (same structure as sub_arguments)
+            // ... same structure as sub_arguments
+          ]
         }
-      ],
-      "reliability_score": Float,    // 0.0-1.0
-      "reliability_label": String    // "Très fiable" | "Fiable" | "Peu fiable" | etc.
+      }
+    ],
+    "orphan_arguments": [],                  // Arguments without clear parent
+    "metadata": {
+      "total_chains": Integer,               // Total number of reasoning chains
+      "total_arguments": Integer             // Total arguments across all chains
+    }
+  },
+
+  // Enriched thesis arguments with research/analysis
+  "enriched_thesis_arguments": [
+    {
+      "argument": String,                    // Original thesis argument
+      "argument_en": String,                 // English translation
+      "stance": String,                      // "affirmatif" | "conditionnel"
+      "confidence": Float,
+      "chain_id": Integer,                   // Links to argument_structure
+      "sub_arguments_count": Integer,
+      "counter_arguments_count": Integer,
+      "sources": {                           // Categorized research sources
+        "scientific": [...],
+        "medical": [...],
+        "statistical": [...]
+      },
+      "analysis": {
+        "pros": [                            // Supporting evidence from sources
+          {
+            "claim": String,
+            "source": String
+          }
+        ],
+        "cons": [                            // Contradicting evidence
+          {
+            "claim": String,
+            "source": String
+          }
+        ]
+      },
+      "reliability_score": Float             // 0.0-1.0
     }
   ],
-  "metadata": {
-    "video_id": String,
-    "analysis_mode": String,
-    "processed_at": ISODate,
-    "model_versions": {
-      "extraction": String,
-      "analysis": String
-    }
-  }
+
+  "report_markdown": String,                 // Formatted markdown report
+  "analysis_mode": String                    // "simple" | "medium" | "hard"
 }
 ```
+
+### Key Improvements
+
+**Hierarchical Structure**:
+- Arguments organized as **reasoning chains** (thesis → sub-arguments → evidence)
+- Clear parent-child relationships
+- Complete reasoning flows preserved
+
+**Separation of Concerns**:
+- `argument_structure`: Pure extraction results (hierarchical tree)
+- `enriched_thesis_arguments`: Research and analysis added to thesis nodes
+
+**Benefits**:
+- Better represents actual argumentation structure
+- Easier to visualize and understand reasoning
+- Enables chain-level reliability scoring
+- Preserves context and relationships
 
 ---
 
@@ -201,7 +268,10 @@ from app.constants import AnalysisMode
 await save_analysis(
     video_id="dQw4w9WgXcQ",
     youtube_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    content={"arguments": [...]},
+    content={
+        "argument_structure": {...},
+        "enriched_thesis_arguments": [...]
+    },
     analysis_mode=AnalysisMode.SIMPLE
 )
 

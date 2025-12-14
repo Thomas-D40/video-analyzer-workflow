@@ -97,63 +97,100 @@ See `tests/README.md` for details.
 
 ```mermaid
 graph TD
-    Start([YouTube Video URL]) --> Extract[Extract Transcript]
+    Start([YouTube Video URL]) --> VideoID[Extract Video ID]
+    VideoID --> CacheCheck{Check MongoDB<br/>Cache}
+
+    CacheCheck -->|Found & !force_refresh| Return([Return Cached<br/>Analysis])
+    CacheCheck -->|Not Found| Extract[Extract Transcript]
+
     Extract --> Arguments[Extract Arguments<br/>GPT-4o]
 
     Arguments --> Loop{For Each<br/>Argument}
 
     Loop --> Classify[Topic Classifier<br/>GPT-4o-mini]
+    Classify --> QueryGen[Generate Optimized Queries<br/>GPT-4o-mini]
 
-    Classify --> Strategy{Determine<br/>Research Strategy}
+    QueryGen --> Strategy{Select<br/>Sources}
 
-    Strategy -->|Medicine| MedAgents[PubMed + Europe PMC<br/>+ Fact-Check APIs]
-    Strategy -->|Economics| EconAgents[OECD + World Bank<br/>+ Semantic Scholar]
-    Strategy -->|Physics/CS/Math| SciAgents[ArXiv + Semantic Scholar<br/>+ CORE + DOAJ]
-    Strategy -->|Current Events| NewsAgents[NewsAPI + GNews<br/>+ Fact-Check APIs]
-    Strategy -->|Fact-Check| FactAgents[Google Fact Check<br/>+ ClaimBuster]
-    Strategy -->|General| GenAgents[Semantic Scholar<br/>+ CrossRef]
+    Strategy -->|Medicine| MedSearch[PubMed<br/>Europe PMC<br/>Fact-Check]
+    Strategy -->|Economics| EconSearch[OECD<br/>World Bank<br/>Semantic Scholar]
+    Strategy -->|Physics/CS| SciSearch[ArXiv<br/>CORE<br/>DOAJ]
+    Strategy -->|Current Events| NewsSearch[NewsAPI<br/>GNews]
+    Strategy -->|Fact-Check| FactSearch[Google Fact Check<br/>ClaimBuster]
+    Strategy -->|General| GenSearch[Semantic Scholar<br/>CrossRef]
 
-    MedAgents --> QueryGen[Generate Queries<br/>GPT-4o-mini]
-    EconAgents --> QueryGen
-    SciAgents --> QueryGen
-    NewsAgents --> QueryGen
-    FactAgents --> QueryGen
-    GenAgents --> QueryGen
+    MedSearch --> SearchParallel[Execute Searches<br/>in Parallel]
+    EconSearch --> SearchParallel
+    SciSearch --> SearchParallel
+    NewsSearch --> SearchParallel
+    FactSearch --> SearchParallel
+    GenSearch --> SearchParallel
 
-    QueryGen --> Search[Execute Searches<br/>in Parallel]
+    SearchParallel --> Screening[Relevance Screening<br/>GPT-4o-mini]
+    Screening --> TopN{Select Top N<br/>Sources}
 
-    Search --> PubMed[(PubMed API)]
-    Search --> SemanticScholar[(Semantic Scholar API)]
-    Search --> CrossRef[(CrossRef API)]
-    Search --> ArXiv[(ArXiv API)]
-    Search --> OECD[(OECD Data)]
-    Search --> WorldBank[(World Bank API)]
+    TopN -->|High Relevance| Fulltext[Fetch Full Text<br/>MCP/Web]
+    TopN -->|Low Relevance| Abstract[Use Abstract Only]
 
-    PubMed --> Aggregate[Aggregate Sources]
-    SemanticScholar --> Aggregate
-    CrossRef --> Aggregate
-    ArXiv --> Aggregate
-    OECD --> Aggregate
-    WorldBank --> Aggregate
+    Fulltext --> Analysis[Extract Pros & Cons<br/>GPT-4o-mini]
+    Abstract --> Analysis
 
-    Aggregate --> ProsCons[Extract Pros/Cons<br/>GPT-4o]
+    Analysis --> Aggregate[Calculate Reliability Score<br/>Evidence Balance]
 
-    ProsCons --> Reliability[Calculate Reliability Score]
+    Aggregate --> LoopEnd{More<br/>Arguments?}
+    LoopEnd -->|Yes| Loop
+    LoopEnd -->|No| Report[Generate Report]
 
-    Reliability --> MoreArgs{More<br/>Arguments?}
+    Report --> SaveCache[(Save to MongoDB)]
+    SaveCache --> End([Return New<br/>Analysis])
 
-    MoreArgs -->|Yes| Loop
-    MoreArgs -->|No| Report[Generate Markdown Report]
-
-    Report --> Cache[(Save to MongoDB)]
-    Cache --> End([Return Analysis])
-
+    %% Styling
+    style CacheCheck fill:#fff4e1
+    style Arguments fill:#ffe1e1
     style Classify fill:#e1f5ff
     style QueryGen fill:#e1f5ff
-    style Arguments fill:#ffe1e1
-    style ProsCons fill:#ffe1e1
-    style Strategy fill:#fff4e1
-
-    classDef apiNode fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
-    class PubMed,SemanticScholar,CrossRef,ArXiv,OECD,WorldBank apiNode
+    style Screening fill:#e1f5ff
+    style Analysis fill:#ffe1e1
+    style Aggregate fill:#fff4e1
+    style Return fill:#e8f5e9
+    style End fill:#e8f5e9
 ```
+### Workflow Components
+
+**0. Cache Check** (MongoDB)
+- Extract video ID from URL
+- Check MongoDB for existing analysis
+- Return cached result if found (unless `force_refresh=true`)
+- Skip to end if cache hit (saves time & API costs)
+
+**1. Extraction** (GPT-4o)
+- Extract transcript from YouTube video
+- Identify substantive arguments with stance detection
+
+**2. Orchestration** (GPT-4o-mini)
+- Classify argument topic (medicine, economics, news, etc.)
+- Generate optimized queries for each research API
+- Select appropriate sources based on topic
+
+**3. Research** (API Clients)
+- Execute parallel searches across 13+ sources:
+  - **Medical**: PubMed, Europe PMC
+  - **Scientific**: ArXiv, CORE, DOAJ, Semantic Scholar
+  - **Economic**: OECD, World Bank
+  - **News**: NewsAPI, GNews
+  - **Fact-Check**: Google Fact Check, ClaimBuster
+
+**4. Enrichment** (GPT-4o-mini)
+- Screen sources by relevance (top N selection)
+- Fetch full text for high-relevance sources
+- Use abstracts only for low-relevance sources
+
+**5. Analysis** (GPT-4o-mini)
+- Extract supporting evidence (pros)
+- Extract contradicting evidence (cons)
+- Calculate reliability score (0.0-1.0)
+
+**6. Output**
+- Generate Markdown report
+- Save to MongoDB
+- Return complete analysis

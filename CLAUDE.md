@@ -63,7 +63,14 @@ The application is organized into logical layers with clear separation of concer
 Agents use OpenAI's API for intelligent processing. All agents follow the **hybrid pattern** (prompts at top, constants from `app.constants`).
 
 **`app/agents/extraction/`** - Extract information from transcripts
-- `arguments.py`: Extract substantive arguments with stance detection using GPT-4o
+- `arguments.py`: Main orchestrator for 7-step extraction pipeline
+- `segmentation.py`: Break transcripts into overlapping segments
+- `local_extractor.py`: Extract arguments from each segment using GPT-4o
+- `consolidator.py`: Deduplicate arguments via embeddings
+- `validators.py`: Validate explanatory arguments (causal/mechanistic)
+- `translator.py`: Translate to English using GPT-4o-mini
+- `hierarchy.py`: Classify argument roles and relationships
+- `tree_builder.py`: Build nested ArgumentStructure (thesis → sub-arguments → evidence)
 
 **`app/agents/orchestration/`** - Coordinate research workflow
 - `topic_classifier.py`: Classify arguments by domain (medical, scientific, economic) using GPT-4o-mini

@@ -21,6 +21,28 @@ from app.services.storage import submit_rating, get_available_analyses
 from app.utils.youtube import extract_video_id
 from app.constants import AnalysisMode, AnalysisStatus
 
+
+def count_arguments_from_content(content: Dict[str, Any]) -> int:
+    """
+    Count total arguments from analysis content.
+
+    Args:
+        content: Analysis content dict with ArgumentStructure
+
+    Returns:
+        Total number of thesis arguments
+    """
+    if not content:
+        return 0
+
+    # Get count from argument_structure metadata
+    arg_structure = content.get("argument_structure", {})
+    if arg_structure:
+        metadata = arg_structure.get("metadata", {})
+        return metadata.get("total_chains", 0)
+
+    return 0
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
@@ -427,9 +449,9 @@ async def get_available_analyses_endpoint(video_id: str):
             elif not isinstance(created_at, datetime):
                 created_at = updated_at
 
-            # Get content
+            # Get content and count arguments
             content = analysis_dict.get("content", {})
-            arguments_count = len(content.get("arguments", [])) if content else 0
+            arguments_count = count_arguments_from_content(content)
 
             available_analyses_list.append(AvailableAnalysis(
                 analysis_mode=mode,
@@ -602,7 +624,7 @@ async def get_admin_stats(authorized: bool = Depends(verify_admin_password)):
                         "video_id": doc.id,
                         "youtube_url": doc.youtube_url,
                         "mode": mode,
-                        "arguments_count": len(analysis.content.get("arguments", [])),
+                        "arguments_count": count_arguments_from_content(analysis.content),
                         "updated_at": analysis.updated_at.isoformat() if analysis.updated_at else None,
                         "average_rating": analysis.average_rating,
                         "rating_count": analysis.rating_count

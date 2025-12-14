@@ -5,6 +5,54 @@ from pydantic import BaseModel, Field
 from app.constants import AnalysisMode, AnalysisStatus, RATING_MIN, RATING_MAX
 
 
+# ============================================================================
+# TREE STRUCTURE MODELS (for new nested argument representation)
+# ============================================================================
+
+class EvidenceNodeModel(BaseModel):
+    """Evidence node - leaf node with specific evidence/data."""
+    argument: str
+    argument_en: str
+    stance: str
+    confidence: float
+    segment_id: int
+    source_language: str
+
+
+class SubArgumentNodeModel(BaseModel):
+    """Sub-argument node - middle node with supporting argument."""
+    argument: str
+    argument_en: str
+    stance: str
+    confidence: float
+    evidence: List[EvidenceNodeModel] = Field(default_factory=list)
+
+
+class ThesisNodeModel(BaseModel):
+    """Thesis node - root node with main thesis."""
+    argument: str
+    argument_en: str
+    stance: str
+    confidence: float
+    sub_arguments: List[SubArgumentNodeModel] = Field(default_factory=list)
+    counter_arguments: List[SubArgumentNodeModel] = Field(default_factory=list)
+
+
+class ReasoningChainModel(BaseModel):
+    """Complete reasoning chain from thesis to evidence."""
+    thesis: ThesisNodeModel
+    chain_id: int
+    total_arguments: int
+
+
+class ArgumentStructureModel(BaseModel):
+    """Collection of all reasoning chains with hierarchical structure."""
+    reasoning_chains: List[ReasoningChainModel] = Field(default_factory=list)
+    orphan_arguments: List[Dict[str, Any]] = Field(default_factory=list)
+    total_chains: int = 0
+    total_arguments: int = 0
+
+
 class AnalysisData(BaseModel):
     """
     Analysis data for a specific mode.

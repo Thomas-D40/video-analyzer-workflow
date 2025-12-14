@@ -14,7 +14,7 @@ from typing import Dict, List, Any
 
 from app.utils.youtube import extract_video_id
 from app.utils.transcript import extract_transcript
-from app.agents.extraction import extract_arguments
+from app.agents.extraction import extract_arguments, structure_to_dict
 from app.services.research import (
     search_arxiv,
     search_world_bank_data,
@@ -82,11 +82,21 @@ async def process_video(
             requested_analysis = all_analyses["analyses"].get(analysis_mode.value)
 
             if requested_analysis and requested_analysis.get("status") == "completed":
-                # Requested mode is available - return all analyses
+                # Requested mode is available - return in consistent format
                 print(f"[INFO] Cache hit for mode '{analysis_mode.value}'")
-                result = all_analyses.copy()
-                result["cached"] = True
-                print(f"[DEBUG] Returning all analyses: {list(result['analyses'].keys())}")
+
+                # Extract content from cached analysis
+                cached_content = requested_analysis.get("content", {})
+
+                # Return in same format as fresh results
+                result = {
+                    "video_id": video_id,
+                    "youtube_url": all_analyses.get("youtube_url", ""),
+                    "cached": True,
+                    **cached_content  # Spread cached content (includes argument_structure, enriched_thesis_arguments, etc.)
+                }
+
+                print(f"[DEBUG] Returning cached analysis for mode '{analysis_mode.value}'")
                 return result
             else:
                 # Requested mode not available, need to generate it
@@ -100,23 +110,43 @@ async def process_video(
     if not transcript_text or len(transcript_text.strip()) < TRANSCRIPT_MIN_LENGTH:
         raise ValueError("Transcript not found or too short")
 
-    # Step 3: Extract arguments with language detection
-    language, arguments = extract_arguments(transcript_text, video_id=video_id)
+    # Step 3: Extract arguments with language detection (now returns ArgumentStructure)
+    language, argument_structure = extract_arguments(transcript_text, video_id=video_id)
     print(f"[INFO workflow] Video language: {language}")
+    print(f"[INFO workflow] Found {argument_structure.total_chains} reasoning chains with {argument_structure.total_arguments} total arguments")
 
-    if not arguments:
+    if not argument_structure.reasoning_chains:
         no_args_message = "No arguments found in this video." if language == "en" else "Aucun argument trouvé dans cette vidéo."
+        structure_dict = structure_to_dict(argument_structure)
         return {
             "video_id": video_id,
             "youtube_url": youtube_url,
             "language": language,
-            "arguments": [],
+            "argument_structure": structure_dict,
+            "enriched_thesis_arguments": [],
             "report_markdown": no_args_message
         }
     
     # Step 4 & 5: Research and Analysis (PARALLEL EXECUTION)
-    # Process all arguments in parallel for better performance
-    enriched_arguments = await research_all_arguments_parallel(arguments, analysis_mode=analysis_mode)
+    # Extract thesis arguments from reasoning forest for research
+    # Note: We only research thesis-level arguments (main claims), not sub-arguments/evidence
+    thesis_arguments = []
+    for chain in argument_structure.reasoning_chains:
+        thesis_arg = {
+            "argument": chain.thesis.argument,
+            "argument_en": chain.thesis.argument_en,
+            "stance": chain.thesis.stance,
+            "confidence": chain.thesis.confidence,
+            "chain_id": chain.chain_id,
+            "sub_arguments_count": len(chain.thesis.sub_arguments),
+            "counter_arguments_count": len(chain.thesis.counter_arguments)
+        }
+        thesis_arguments.append(thesis_arg)
+
+    print(f"[INFO workflow] Researching {len(thesis_arguments)} thesis-level arguments")
+
+    # Process thesis arguments in parallel for better performance
+    enriched_thesis_arguments = await research_all_arguments_parallel(thesis_arguments, analysis_mode=analysis_mode)
     
     # Step 6: Reliability calculation
     try:
@@ -128,31 +158,35 @@ async def process_video(
                 "stance": arg.get("stance", "affirmatif"),
                 "sources": arg.get("sources", {})  # Add real sources
             }
-            for arg in enriched_arguments
+            for arg in enriched_thesis_arguments
         ]
-        
+
         aggregation_result = aggregate_results(items_for_aggregation, video_id=video_id)
         aggregated_args_map = {a["argument"]: a for a in aggregation_result.get("arguments", [])}
-        
-        final_arguments = []
-        for original_arg in enriched_arguments:
+
+        final_thesis_arguments = []
+        for original_arg in enriched_thesis_arguments:
             arg_text = original_arg["argument"]
             agg_data = aggregated_args_map.get(arg_text, {})
             reliability = agg_data.get("reliability", 0.5)
             original_arg["reliability_score"] = reliability
-            final_arguments.append(original_arg)
-        
-        arguments = final_arguments
-    except Exception:
-        arguments = enriched_arguments
+            final_thesis_arguments.append(original_arg)
+
+    except Exception as e:
+        print(f"[ERROR] Aggregation error: {e}")
+        final_thesis_arguments = enriched_thesis_arguments
 
     # Report generation
+    # Convert argument structure to dict for JSON serialization
+    structure_dict = structure_to_dict(argument_structure)
+
     output_data = {
         "video_id": video_id,
         "youtube_url": youtube_url,
         "language": language,
-        "arguments_count": len(arguments),
-        "arguments": arguments
+        "argument_structure": structure_dict,
+        "enriched_thesis_arguments": final_thesis_arguments,
+        "arguments_count": len(final_thesis_arguments)
     }
 
     report_markdown = generate_markdown_report(output_data)
@@ -161,7 +195,8 @@ async def process_video(
         "video_id": video_id,
         "youtube_url": youtube_url,
         "language": language,
-        "arguments": arguments,
+        "argument_structure": structure_dict,
+        "enriched_thesis_arguments": final_thesis_arguments,
         "report_markdown": report_markdown,
         "analysis_mode": analysis_mode
     }
@@ -235,11 +270,21 @@ async def process_video_with_progress(
             requested_analysis = all_analyses["analyses"].get(analysis_mode.value)
 
             if requested_analysis and requested_analysis.get("status") == "completed":
-                # Requested mode is available - return all analyses
+                # Requested mode is available - return in consistent format
                 await progress_callback("cache", 100, "Using cached analysis")
-                result = all_analyses.copy()
-                result["cached"] = True
-                print(f"[DEBUG] Returning all analyses: {list(result['analyses'].keys())}")
+
+                # Extract content from cached analysis
+                cached_content = requested_analysis.get("content", {})
+
+                # Return in same format as fresh results
+                result = {
+                    "video_id": video_id,
+                    "youtube_url": all_analyses.get("youtube_url", ""),
+                    "cached": True,
+                    **cached_content  # Spread cached content (includes argument_structure, enriched_thesis_arguments, etc.)
+                }
+
+                print(f"[DEBUG] Returning cached analysis for mode '{analysis_mode.value}'")
                 return result
             else:
                 # Requested mode not available, need to generate it
@@ -254,62 +299,95 @@ async def process_video_with_progress(
     if not transcript_text or len(transcript_text.strip()) < TRANSCRIPT_MIN_LENGTH:
         raise ValueError("Transcript not found or too short")
 
-    # Step 3: Extract arguments
+    # Step 3: Extract arguments (now returns ArgumentStructure)
     await progress_callback("arguments", 25, "Extracting arguments from transcript...")
-    language, arguments = extract_arguments(transcript_text, video_id=video_id)
+    language, argument_structure = extract_arguments(transcript_text, video_id=video_id)
 
-    if not arguments:
+    if not argument_structure.reasoning_chains:
         await progress_callback("complete", 100, "No arguments found - analysis complete")
+        structure_dict = structure_to_dict(argument_structure)
         result = {
             "video_id": video_id,
             "youtube_url": youtube_url,
             "language": language,
-            "arguments": [],
+            "argument_structure": structure_dict,
+            "enriched_thesis_arguments": [],
             "report_markdown": "No substantial arguments found in this video.",
             "analysis_mode": analysis_mode
         }
         await save_analysis(video_id, youtube_url, result, analysis_mode=analysis_mode)
         return result
 
-    # Step 4: Generate search queries
-    await progress_callback("queries", 35, f"Generating search queries for {len(arguments)} arguments...")
-    arg_count = len(arguments)
-    
+    # Step 4: Extract thesis arguments from reasoning forest
+    thesis_arguments = []
+    for chain in argument_structure.reasoning_chains:
+        thesis_arg = {
+            "argument": chain.thesis.argument,
+            "argument_en": chain.thesis.argument_en,
+            "stance": chain.thesis.stance,
+            "confidence": chain.thesis.confidence,
+            "chain_id": chain.chain_id,
+            "sub_arguments_count": len(chain.thesis.sub_arguments),
+            "counter_arguments_count": len(chain.thesis.counter_arguments)
+        }
+        thesis_arguments.append(thesis_arg)
+
+    await progress_callback("queries", 35, f"Generating search queries for {len(thesis_arguments)} thesis arguments...")
+    arg_count = len(thesis_arguments)
+
     # Step 5: Research (parallel)
-    await progress_callback("research", 45, f"Researching sources for {arg_count} arguments...")
-    enriched_arguments = await research_all_arguments_parallel(
-        arguments, analysis_mode
+    await progress_callback("research", 45, f"Researching sources for {arg_count} thesis arguments...")
+    enriched_thesis_arguments = await research_all_arguments_parallel(
+        thesis_arguments, analysis_mode
     )
-    
+
     # Step 6: Pros/cons analysis
     await progress_callback("analysis", 70, "Analyzing pros and cons from sources...")
-    for idx, arg in enumerate(enriched_arguments):
-        percent = 70 + int((idx / len(enriched_arguments)) * 20)
-        await progress_callback("analysis", percent, f"Analyzing argument {idx+1}/{len(enriched_arguments)}...")
-    
+    for idx, arg in enumerate(enriched_thesis_arguments):
+        percent = 70 + int((idx / len(enriched_thesis_arguments)) * 20)
+        await progress_callback("analysis", percent, f"Analyzing argument {idx+1}/{len(enriched_thesis_arguments)}...")
+
     # Step 7: Aggregation
     await progress_callback("aggregation", 90, "Calculating reliability scores...")
     try:
-        aggregated_args_map = aggregate_results(enriched_arguments)
-        final_arguments = []
-        for original_arg in enriched_arguments:
+        items_for_aggregation = [
+            {
+                "argument": arg["argument"],
+                "pros": arg["analysis"].get("pros", []),
+                "cons": arg["analysis"].get("cons", []),
+                "stance": arg.get("stance", "affirmatif"),
+                "sources": arg.get("sources", {})
+            }
+            for arg in enriched_thesis_arguments
+        ]
+
+        aggregation_result = aggregate_results(items_for_aggregation, video_id=video_id)
+        aggregated_args_map = {a["argument"]: a for a in aggregation_result.get("arguments", [])}
+
+        final_thesis_arguments = []
+        for original_arg in enriched_thesis_arguments:
             arg_text = original_arg["argument"]
             agg_data = aggregated_args_map.get(arg_text, {})
             reliability = agg_data.get("reliability", 0.5)
             original_arg["reliability_score"] = reliability
-            final_arguments.append(original_arg)
-        arguments = final_arguments
-    except Exception:
-        arguments = enriched_arguments
+            final_thesis_arguments.append(original_arg)
+
+    except Exception as e:
+        print(f"[ERROR] Aggregation error: {e}")
+        final_thesis_arguments = enriched_thesis_arguments
 
     # Step 8: Report generation
     await progress_callback("report", 95, "Generating final report...")
+    # Convert argument structure to dict for JSON serialization
+    structure_dict = structure_to_dict(argument_structure)
+
     output_data = {
         "video_id": video_id,
         "youtube_url": youtube_url,
         "language": language,
-        "arguments_count": len(arguments),
-        "arguments": arguments
+        "argument_structure": structure_dict,
+        "enriched_thesis_arguments": final_thesis_arguments,
+        "arguments_count": len(final_thesis_arguments)
     }
 
     report_markdown = generate_markdown_report(output_data)
@@ -318,7 +396,8 @@ async def process_video_with_progress(
         "video_id": video_id,
         "youtube_url": youtube_url,
         "language": language,
-        "arguments": arguments,
+        "argument_structure": structure_dict,
+        "enriched_thesis_arguments": final_thesis_arguments,
         "report_markdown": report_markdown,
         "analysis_mode": analysis_mode
     }

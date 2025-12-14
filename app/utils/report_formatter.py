@@ -68,16 +68,18 @@ def generate_markdown_report(data: Dict) -> str:
     Génère un rapport Markdown formaté à partir des données JSON.
 
     Supports bilingual output based on video language.
+    Now supports tree structure with thesis → sub-arguments → evidence.
 
     Args:
-        data: Dictionnaire contenant les résultats (video_id, arguments, language, etc.)
+        data: Dictionnaire contenant les résultats (video_id, arguments, language, argument_structure, etc.)
 
     Returns:
         Chaîne contenant le rapport Markdown complet
     """
     video_id = data.get("video_id", "Inconnu" if data.get("language") == "fr" else "Unknown")
     youtube_url = data.get("youtube_url", "")
-    arguments = data.get("arguments", [])
+    arguments = data.get("arguments", [])  # Enriched thesis arguments for backward compatibility
+    argument_structure = data.get("argument_structure", {})  # Tree structure
     language = data.get("language", "en")  # Default to English
 
     # Language-specific strings
@@ -102,7 +104,11 @@ def generate_markdown_report(data: Dict) -> str:
             "scientific_sources": "Sources Scientifiques",
             "medical_sources": "Sources Médicales",
             "statistical_data": "Données Statistiques",
-            "access_legend": "**Légende d'accès** : 🔓 Accès libre | 📄 Résumé uniquement | 📊 Données complètes | 📋 Métadonnées uniquement"
+            "access_legend": "**Légende d'accès** : 🔓 Accès libre | 📄 Résumé uniquement | 📊 Données complètes | 📋 Métadonnées uniquement",
+            "reasoning_structure": "### 🌳 Structure de l'Argumentation",
+            "sub_arguments": "**Arguments Supports**",
+            "counter_arguments": "**Contre-Arguments**",
+            "evidence": "**Preuves/Exemples**"
         }
     else:  # English
         strings = {
@@ -125,7 +131,11 @@ def generate_markdown_report(data: Dict) -> str:
             "scientific_sources": "Scientific Sources",
             "medical_sources": "Medical Sources",
             "statistical_data": "Statistical Data",
-            "access_legend": "**Access Legend**: 🔓 Open Access | 📄 Abstract Only | 📊 Full Data | 📋 Metadata Only"
+            "access_legend": "**Access Legend**: 🔓 Open Access | 📄 Abstract Only | 📊 Full Data | 📋 Metadata Only",
+            "reasoning_structure": "### 🌳 Reasoning Structure",
+            "sub_arguments": "**Supporting Sub-Arguments**",
+            "counter_arguments": "**Counter-Arguments**",
+            "evidence": "**Evidence/Examples**"
         }
     
     # En-tête du rapport
