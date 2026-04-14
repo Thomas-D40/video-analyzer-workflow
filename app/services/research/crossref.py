@@ -7,13 +7,22 @@ including citations, funding, licenses and bibliographic data.
 API Documentation: https://www.crossref.org/documentation/retrieve-metadata/rest-api/
 Rate Limits: Variable based on "polite" usage (with contact email)
 """
+import re
 from typing import List, Dict, Optional
-import requests
+
+import httpx
+
 from ...logger import get_logger
+from ..retry import RETRY_STRATEGY
 
 logger = get_logger(__name__)
 
-def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+# "Polite" headers for better rate limits
+_HEADERS = {"User-Agent": "VideoAnalyzerWorkflow/1.0 (mailto:research@example.com)"}
+
+
+@RETRY_STRATEGY
+async def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
     Search for academic publications via CrossRef.
 
@@ -38,125 +47,101 @@ def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         - authors: List of authors
 
     Raises:
-        Exception: If the query fails
+        httpx.HTTPStatusError: On HTTP 5xx / 429 after retries
+        httpx.TimeoutException: On timeout after retries
     """
     base_url = "https://api.crossref.org/works"
-
-    # "Polite" headers for better rate limits
-    headers = {
-        "User-Agent": "VideoAnalyzerWorkflow/1.0 (mailto:research@example.com)"
-    }
-
     params = {
         "query": query,
         "rows": max_results,
         "select": "DOI,title,author,published,abstract,type,publisher,is-referenced-by-count,URL"
     }
 
-    try:
-        response = requests.get(base_url, params=params, headers=headers, timeout=10)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(base_url, params=params, headers=_HEADERS)
         response.raise_for_status()
-
         data = response.json()
-        articles = []
 
-        if "message" not in data or "items" not in data["message"]:
-            logger.debug("crossref_no_results", query=query)
-            return []
+    if "message" not in data or "items" not in data["message"]:
+        logger.debug("crossref_no_results", query=query)
+        return []
 
-        for item in data["message"]["items"]:
-            # Extract title
-            title_list = item.get("title", [])
-            title = title_list[0] if title_list else "Untitled"
+    articles = []
+    for item in data["message"]["items"]:
+        title_list = item.get("title", [])
+        title = title_list[0] if title_list else "Untitled"
 
-            # Extract DOI and URL
-            doi = item.get("DOI", "")
-            url = item.get("URL", f"https://doi.org/{doi}" if doi else "")
+        doi = item.get("DOI", "")
+        url = item.get("URL", f"https://doi.org/{doi}" if doi else "")
 
-            # Extract abstract
-            abstract = item.get("abstract", "")
-            if not abstract:
-                # Fallback to subtitle or type info
-                subtitle = item.get("subtitle", [])
-                if subtitle:
-                    abstract = subtitle[0]
-                else:
-                    abstract = f"{item.get('type', 'Publication')} from {item.get('publisher', 'N/A')}"
-
-            # Clean HTML tags from abstract (CrossRef sometimes includes them)
-            if abstract:
-                import re
-                abstract = re.sub(r'<[^>]+>', '', abstract)
-
-            # Extract year
-            published = item.get("published", {})
-            if "date-parts" in published and published["date-parts"]:
-                year = published["date-parts"][0][0] if published["date-parts"][0] else "N/A"
+        abstract = item.get("abstract", "")
+        if not abstract:
+            subtitle = item.get("subtitle", [])
+            if subtitle:
+                abstract = subtitle[0]
             else:
-                year = "N/A"
+                abstract = f"{item.get('type', 'Publication')} from {item.get('publisher', 'N/A')}"
 
-            # Extract authors
-            authors_list = item.get("author", [])
-            authors = []
-            for author in authors_list[:3]:  # First 3 authors
-                given = author.get("given", "")
-                family = author.get("family", "")
-                if family:
-                    name = f"{given} {family}".strip() if given else family
-                    authors.append(name)
+        # Clean HTML tags from abstract (CrossRef sometimes includes them)
+        if abstract:
+            abstract = re.sub(r'<[^>]+>', '', abstract)
 
-            # Extract citation count
-            citations = item.get("is-referenced-by-count", 0)
+        published = item.get("published", {})
+        if "date-parts" in published and published["date-parts"]:
+            year = published["date-parts"][0][0] if published["date-parts"][0] else "N/A"
+        else:
+            year = "N/A"
 
-            # Check for license information (indicator of potential open access)
-            licenses = item.get("license", [])
-            is_open_license = any("creativecommons" in lic.get("URL", "").lower() or
-                                  "cc-by" in lic.get("URL", "").lower()
-                                  for lic in licenses)
+        authors_list = item.get("author", [])
+        authors = []
+        for author in authors_list[:3]:
+            given = author.get("given", "")
+            family = author.get("family", "")
+            if family:
+                name = f"{given} {family}".strip() if given else family
+                authors.append(name)
 
-            # Determine access type
-            if is_open_license:
-                access_type = "open_access"
-                has_full_text = True
-                access_note = "Open access via Creative Commons license"
-            else:
-                access_type = "metadata_only"
-                has_full_text = False
-                access_note = "Metadata and abstract only - full text may require subscription"
+        citations = item.get("is-referenced-by-count", 0)
 
-            article = {
-                "title": title,
-                "url": url,
-                "snippet": abstract[:500],  # Limit snippet length
-                "source": "CrossRef",
-                "doi": doi,
-                "type": item.get("type", "N/A"),
-                "year": str(year),
-                "citations": citations,
-                "publisher": item.get("publisher", "N/A"),
-                "authors": ", ".join(authors) if authors else "N/A",
-                "access_type": access_type,
-                "has_full_text": has_full_text,
-                "access_note": access_note
-            }
+        licenses = item.get("license", [])
+        is_open_license = any(
+            "creativecommons" in lic.get("URL", "").lower() or "cc-by" in lic.get("URL", "").lower()
+            for lic in licenses
+        )
 
-            articles.append(article)
+        if is_open_license:
+            access_type = "open_access"
+            has_full_text = True
+            access_note = "Open access via Creative Commons license"
+        else:
+            access_type = "metadata_only"
+            has_full_text = False
+            access_note = "Metadata and abstract only - full text may require subscription"
 
-        logger.info("crossref_search_end", articles_count=len(articles), query=query)
-        return articles
+        article = {
+            "title": title,
+            "url": url,
+            "snippet": abstract[:500],
+            "source": "CrossRef",
+            "doi": doi,
+            "type": item.get("type", "N/A"),
+            "year": str(year),
+            "citations": citations,
+            "publisher": item.get("publisher", "N/A"),
+            "authors": ", ".join(authors) if authors else "N/A",
+            "access_type": access_type,
+            "has_full_text": has_full_text,
+            "access_note": access_note
+        }
 
-    except requests.exceptions.Timeout:
-        logger.warning("crossref_timeout", query=query)
-        return []
-    except requests.exceptions.RequestException as e:
-        logger.error("crossref_search_error", detail=str(e))
-        return []
-    except Exception as e:
-        logger.error("crossref_unexpected_error", detail=str(e))
-        return []
+        articles.append(article)
+
+    logger.info("crossref_search_end", articles_count=len(articles), query=query)
+    return articles
 
 
-def get_citation_count(doi: str) -> Optional[int]:
+@RETRY_STRATEGY
+async def get_citation_count(doi: str) -> Optional[int]:
     """
     Retrieve the citation count for a given DOI.
 
@@ -167,15 +152,12 @@ def get_citation_count(doi: str) -> Optional[int]:
         Number of citations or None if error
     """
     url = f"https://api.crossref.org/works/{doi}"
-    headers = {
-        "User-Agent": "VideoAnalyzerWorkflow/1.0 (mailto:research@example.com)"
-    }
-
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("message", {}).get("is-referenced-by-count", 0)
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(url, headers=_HEADERS)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("message", {}).get("is-referenced-by-count", 0)
     except Exception as e:
         logger.error("crossref_citations_error", doi=doi, detail=str(e))
         return None

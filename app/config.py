@@ -37,14 +37,6 @@ class Settings(BaseSettings):
     claimbuster_api_key: Optional[str] = None
 
     # Enrichment - Smart Full-Text Filtering
-    mcp_web_fetch_enabled: bool = Field(
-        default=False,
-        description="Enable MCP web-fetch for full-text retrieval"
-    )
-    mcp_web_fetch_timeout: int = Field(
-        default=30,
-        description="Timeout in seconds for web fetch requests"
-    )
     fulltext_screening_enabled: bool = Field(
         default=True,
         description="Enable relevance screening before full-text fetch"

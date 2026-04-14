@@ -1,37 +1,23 @@
 """
-OECD research agent using direct HTTP requests to SDMX REST API.
+OECD research agent — keyword-based dataset lookup.
 
-This agent accesses OECD statistical data through the official SDMX REST API
-without requiring pandasdmx (which has Pydantic v1 dependency conflicts).
+Returns metadata pointers to OECD statistical datasets based on topic
+matching. No external HTTP calls are made; all data is pre-defined.
 
 API Documentation: https://data.oecd.org/api/sdmx-json-documentation/
-New endpoint (July 2024): https://sdmx.oecd.org/public/rest/
-
-Features:
-- Direct HTTP requests using httpx library
-- Keyword-based search through common datasets
-- Rate limiting and error handling
-- Fallback strategies for robustness
 """
-from typing import List, Dict
 import logging
-
-from ...utils.api_helpers import (
-    retry_with_backoff,
-    TransientAPIError,
-    rate_limiters,
-    circuit_breakers
-)
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
 
 class OECDAgent:
     """
-    OECD research agent using direct SDMX REST API calls.
+    OECD research agent using keyword matching against known datasets.
 
-    Uses keyword matching to find relevant OECD datasets without
-    requiring the pandasdmx library.
+    Returns dataset metadata (name, description, URL) without making
+    live HTTP calls to the OECD API.
     """
 
     # Common OECD datasets with their dataflow IDs and metadata
@@ -133,19 +119,15 @@ class OECDAgent:
             List of dataset keys that match the query
         """
         query_lower = query.lower()
-        matched_keys = []
-
-        # Calculate match scores for each dataset
         scores = []
+
         for key, dataset in self.COMMON_DATASETS.items():
             score = 0
 
-            # Check if any keyword appears in the query
             for keyword in dataset["keywords"]:
                 if keyword in query_lower:
                     score += 2
 
-            # Check if query words appear in dataset name or description
             query_words = set(query_lower.split())
             name_words = set(dataset["name"].lower().split())
             desc_words = set(dataset["description"].lower().split())
@@ -156,22 +138,17 @@ class OECDAgent:
             if score > 0:
                 scores.append((key, score))
 
-        # Sort by score and return top matches
         scores.sort(key=lambda x: x[1], reverse=True)
-        matched_keys = [key for key, score in scores[:3]]
+        matched_keys = [key for key, _ in scores[:3]]
 
-        # If no matches, return most common indicators
-        if not matched_keys:
-            matched_keys = ["gdp", "unemployment", "inflation"]
+        return matched_keys if matched_keys else ["gdp", "unemployment", "inflation"]
 
-        return matched_keys
-
-    def search_oecd_data(self, query: str, max_results: int = 3) -> List[Dict[str, str]]:
+    async def search_oecd_data(self, query: str, max_results: int = 3) -> List[Dict[str, str]]:
         """
         Search for statistical indicators in the OECD database.
 
         Uses keyword matching to find relevant OECD datasets and returns
-        metadata about available indicators.
+        metadata about available indicators. No HTTP calls are made.
 
         Args:
             query: Search keywords (e.g., "GDP growth", "unemployment rate")
@@ -185,51 +162,17 @@ class OECDAgent:
             - source: "OECD"
             - indicator_code: Dataflow ID
             - dataset: Dataset name
-
-        Example:
-            >>> agent = OECDAgent()
-            >>> results = agent.search_oecd_data("unemployment France")
-            >>> for result in results:
-            ...     print(f"{result['title']}: {result['snippet']}")
         """
         if not query or len(query.strip()) < 2:
             logger.warning("Query too short for OECD search")
             return []
 
-        try:
-            # Use circuit breaker
-            return circuit_breakers["oecd"].call(
-                self._search_oecd_data_impl,
-                query,
-                max_results
-            )
-        except Exception as e:
-            logger.error(f"OECD search failed: {e}")
-            return []
-
-    def _search_oecd_data_impl(self, query: str, max_results: int) -> List[Dict[str, str]]:
-        """
-        Implementation of OECD search.
-
-        Args:
-            query: Search query
-            max_results: Maximum results to return
-
-        Returns:
-            List of result dictionaries
-        """
-        # Apply rate limiting
-        rate_limiters["oecd"].wait_if_needed()
-
-        # Search for matching datasets
         matched_keys = self._search_datasets(query)
 
-        # Build results
         results = []
         for key in matched_keys[:max_results]:
             dataset = self.COMMON_DATASETS[key]
-
-            result = {
+            results.append({
                 "title": dataset["name"],
                 "url": dataset["url"],
                 "snippet": dataset["description"],
@@ -239,23 +182,19 @@ class OECDAgent:
                 "access_type": "full_data",
                 "has_full_text": True,
                 "access_note": "Complete statistical data freely available"
-            }
-            results.append(result)
+            })
 
         logger.info(f"[OECD] Found {len(results)} indicators for: {query}")
         return results
 
 
-# Module-level convenience function for backward compatibility
+# Module-level instance and async wrapper
 _oecd_agent = None
 
 
-def search_oecd_data(query: str, max_results: int = 3) -> List[Dict[str, str]]:
+async def search_oecd_data(query: str, max_results: int = 3) -> List[Dict[str, str]]:
     """
     Search for statistical indicators in the OECD database.
-
-    This is a convenience function that maintains backward compatibility
-    with the original API.
 
     Args:
         query: Search keywords (e.g., "GDP growth", "unemployment rate")
@@ -269,15 +208,10 @@ def search_oecd_data(query: str, max_results: int = 3) -> List[Dict[str, str]]:
         - source: "OECD"
         - indicator_code: Indicator code
         - dataset: Dataset name
-
-    Example:
-        >>> results = search_oecd_data("unemployment France")
-        >>> for result in results:
-        ...     print(f"{result['title']}: {result['snippet']}")
     """
     global _oecd_agent
 
     if _oecd_agent is None:
         _oecd_agent = OECDAgent()
 
-    return _oecd_agent.search_oecd_data(query, max_results)
+    return await _oecd_agent.search_oecd_data(query, max_results)
