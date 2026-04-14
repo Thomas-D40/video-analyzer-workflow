@@ -4,6 +4,7 @@ API FastAPI pour l'analyse de vidéos YouTube.
 Expose un endpoint POST /api/analyze qui accepte une URL YouTube
 et retourne l'analyse complète (arguments, sources, scores).
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
@@ -45,17 +46,26 @@ def count_arguments_from_content(content: Dict[str, Any]) -> int:
 
     return 0
 
-configure_logging(get_settings().log_level)
 logger = get_logger(__name__)
 
 # Configuration
 os.environ.setdefault("DATABASE_URL", "mongodb://localhost:27017")
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Configure JSON logging after uvicorn sets up its own handlers
+    configure_logging(get_settings().log_level)
+    logger.info("api_startup", log_level=get_settings().log_level)
+    yield
+    logger.info("api_shutdown")
+
+
 app = FastAPI(
     title="YouTube Video Analyzer API",
     description="Analyse les arguments d'une vidéo YouTube avec fact-checking",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS pour permettre les requêtes depuis l'extension Chrome
