@@ -30,6 +30,9 @@ from app.agents.enrichment import (
 )
 from app.agents.analysis import extract_pros_cons
 from app.config import get_settings
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # Thread pool for blocking I/O operations
@@ -71,7 +74,7 @@ async def research_single_agent(
         return (agent_name, [], None)
 
     try:
-        print(f"[INFO parallel] Starting {agent_name} search: '{query[:50]}...'")
+        logger.debug("agent_search_start", agent=agent_name, query_preview=query[:50])
 
         # Map agent names to functions
         agent_funcs = {
@@ -92,11 +95,11 @@ async def research_single_agent(
         # Run in thread pool (these are synchronous functions)
         results = await _run_in_executor(agent_funcs[agent_name])
 
-        print(f"[INFO parallel] {agent_name}: {len(results)} results")
+        logger.debug("agent_search_end", agent=agent_name, results_count=len(results))
         return (agent_name, results, None)
 
     except Exception as e:
-        print(f"[ERROR parallel] {agent_name} error: {e}")
+        logger.warning("agent_search_failed", agent=agent_name, detail=str(e))
         return (agent_name, [], e)
 
 
@@ -123,10 +126,9 @@ async def research_argument_parallel(
         strategy = await _run_in_executor(get_research_strategy, argument_en)
         selected_agents = strategy["agents"]
         categories = strategy["categories"]
-        print(f"[INFO parallel] Argument classified: {categories}")
-        print(f"[INFO parallel] Agents selected: {selected_agents}")
+        logger.debug("research_strategy", categories=categories, agents=selected_agents)
     except Exception as e:
-        print(f"[ERROR parallel] Research strategy error: {e}")
+        logger.error("research_strategy_failed", detail=str(e))
         selected_agents = ["semantic_scholar", "crossref"]
         categories = ["general"]
 
@@ -138,7 +140,7 @@ async def research_argument_parallel(
             selected_agents
         )
     except Exception as e:
-        print(f"[ERROR parallel] Query generation error: {e}")
+        logger.error("query_generation_failed", detail=str(e))
         queries = {}
 
     # Step 3: Execute all agent searches in parallel
@@ -159,8 +161,7 @@ async def research_argument_parallel(
             continue
         all_sources.extend(agent_results)
 
-    print(f"[INFO parallel] Argument: {argument_text[:50]}...")
-    print(f"[INFO parallel] Total sources: {len(all_sources)}")
+    logger.debug("sources_collected", argument_preview=argument_text[:50], total_sources=len(all_sources))
 
     # Determine enrichment settings based on analysis mode
     settings = get_settings()
@@ -177,12 +178,12 @@ async def research_argument_parallel(
     top_n = config["top_n"]
     min_score = config["min_score"]
 
-    print(f"[INFO parallel] Analysis mode: {analysis_mode} (full-text: {top_n}, threshold: {min_score})")
+    logger.info("enrichment_config", analysis_mode=analysis_mode, fulltext_top_n=top_n, min_score=min_score)
 
     # Step 4.5: Enrichment - Screen for relevance
     if enrichment_enabled and all_sources:
         try:
-            print(f"[INFO parallel] Screening {len(all_sources)} sources (top_n={top_n}, min_score={min_score})...")
+            logger.info("screening_start", sources_count=len(all_sources), top_n=top_n, min_score=min_score)
 
             selected_sources, rejected_sources = await _run_in_executor(
                 screen_sources_by_relevance,
@@ -195,16 +196,21 @@ async def research_argument_parallel(
 
             # Log screening stats
             stats = get_screening_stats(all_sources)
-            print(f"[INFO parallel] Screening stats: avg_score={stats['avg_score']:.2f}, "
-                  f"high={stats['high_relevance']}, medium={stats['medium_relevance']}, low={stats['low_relevance']}")
+            logger.debug(
+                "screening_stats",
+                avg_score=round(stats['avg_score'], 2),
+                high_relevance=stats['high_relevance'],
+                medium_relevance=stats['medium_relevance'],
+                low_relevance=stats['low_relevance'],
+            )
 
         except Exception as e:
-            print(f"[ERROR parallel] Screening error: {e}")
+            logger.error("screening_failed", detail=str(e))
             # Fallback: use simple top-N selection
             selected_sources = all_sources[:top_n] if top_n > 0 else []
             rejected_sources = all_sources[top_n:] if top_n > 0 else all_sources
     else:
-        print(f"[INFO parallel] Enrichment disabled for mode '{analysis_mode}', using abstracts only")
+        logger.info("enrichment_disabled", analysis_mode=analysis_mode)
         selected_sources = []
         rejected_sources = all_sources
 
@@ -213,7 +219,7 @@ async def research_argument_parallel(
 
     if enrichment_enabled and web_fetch_enabled and selected_sources:
         try:
-            print(f"[INFO parallel] Fetching full text for {len(selected_sources)} selected sources...")
+            logger.info("fulltext_fetch_start", sources_count=len(selected_sources))
 
             enhanced_sources = await _run_in_executor(
                 fetch_fulltext_for_sources,
@@ -222,18 +228,18 @@ async def research_argument_parallel(
 
             # Count successful full-text retrievals
             fulltext_count = sum(1 for s in enhanced_sources if "fulltext" in s)
-            print(f"[INFO parallel] Successfully retrieved {fulltext_count}/{len(selected_sources)} full texts")
+            logger.info("fulltext_fetch_end", retrieved=fulltext_count, requested=len(selected_sources))
 
             # Combine: enhanced sources + rejected sources
             final_sources = enhanced_sources + rejected_sources
 
         except Exception as e:
-            print(f"[ERROR parallel] Full-text fetch error: {e}")
+            logger.error("fulltext_fetch_failed", detail=str(e))
             # Fallback: use all sources without full text
             final_sources = all_sources
     else:
         if not web_fetch_enabled:
-            print("[INFO parallel] Web fetch disabled, using abstracts only")
+            logger.info("web_fetch_disabled")
         final_sources = all_sources
 
     # Reorganize final sources by type (for report)
@@ -254,15 +260,15 @@ async def research_argument_parallel(
 
     # Step 5: Pros/Cons Analysis (with mixed full-text + abstracts)
     try:
-        print(f"[INFO parallel] Analyzing {len(final_sources)} sources (with enrichment)...")
+        logger.info("pros_cons_start", sources_count=len(final_sources))
         analysis = await _run_in_executor(
             extract_pros_cons,
             argument_en,
             final_sources  # Mix of full-text + abstracts
         )
-        print(f"[INFO parallel] Analysis: {len(analysis.get('pros', []))} pros, {len(analysis.get('cons', []))} cons")
+        logger.info("pros_cons_end", pros_count=len(analysis.get('pros', [])), cons_count=len(analysis.get('cons', [])))
     except Exception as e:
-        print(f"[ERROR parallel] Pros/cons analysis error: {e}")
+        logger.error("pros_cons_failed", detail=str(e))
         analysis = {"pros": [], "cons": []}
 
     # Build enriched object
@@ -302,7 +308,7 @@ async def research_all_arguments_parallel(
     if not arguments:
         return []
 
-    print(f"[INFO parallel] Starting parallel research for {len(arguments)} arguments (mode: {analysis_mode})")
+    logger.info("parallel_research_start", args_count=len(arguments), analysis_mode=str(analysis_mode))
 
     # Create tasks for each argument
     tasks = [
@@ -318,6 +324,6 @@ async def research_all_arguments_parallel(
     # Execute all argument research in parallel
     enriched_arguments = await asyncio.gather(*tasks, return_exceptions=False)
 
-    print(f"[INFO parallel] Completed parallel research for {len(enriched_arguments)} arguments")
+    logger.info("parallel_research_end", enriched_count=len(enriched_arguments))
 
     return enriched_arguments

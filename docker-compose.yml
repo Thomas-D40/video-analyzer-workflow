@@ -23,6 +23,7 @@ services:
       - GNEWS_API_KEY=${GNEWS_API_KEY:-}
       - GOOGLE_FACTCHECK_API_KEY=${GOOGLE_FACTCHECK_API_KEY:-}
       - CLAIMBUSTER_API_KEY=${CLAIMBUSTER_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     expose:
       - "8000"
     volumes:

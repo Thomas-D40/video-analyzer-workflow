@@ -7,7 +7,10 @@ to enable bilingual support (French/English).
 from openai import OpenAI
 from ..config import get_settings
 from ..constants import LANGUAGE_MAP_DETECTION
+from ..logger import get_logger
 import json
+
+logger = get_logger(__name__)
 
 def build_prompt_language_detection(sample: str) -> str:
     """
@@ -49,7 +52,7 @@ def detect_language(text: str) -> str:
     """
     settings = get_settings()
     if not settings.openai_api_key:
-        print("[WARN language_detector] No OpenAI API key, defaulting to English")
+        logger.warning("language_detector_no_api_key")
         return "en"
 
     # Use first 1000 chars for detection (enough to determine language)
@@ -77,12 +80,12 @@ def detect_language(text: str) -> str:
 
         # Validate language code
         if language not in LANGUAGE_MAP_DETECTION.keys():
-            print(f"[WARN language_detector] Invalid language code '{language}', defaulting to 'en'")
+            logger.warning("language_detector_invalid_code", language=language)
             language = "en"
 
-        print(f"[INFO language_detector] Detected language: {language}")
+        logger.info("language_detector_detected", language=language)
         return language
 
     except Exception as e:
-        print(f"[ERROR language_detector] Error detecting language: {e}")
+        logger.error("language_detector_error", detail=str(e))
         return "en"

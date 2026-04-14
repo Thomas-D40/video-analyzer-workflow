@@ -10,6 +10,9 @@ from openai import OpenAI
 from ...config import get_settings
 from ...constants import LLM_TEMP_TOPIC_CLASSIFICATION
 from ...prompts import JSON_OUTPUT_STRICT
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 # ============================================================================
 # DATA STRUCTURES
@@ -116,7 +119,7 @@ def classify_argument_topic(argument: str) -> List[str]:
     """
     settings = get_settings()
     if not settings.openai_api_key:
-        print("[WARN topic_classifier] No OpenAI key, using 'general'")
+        logger.warning("no_openai_key_fallback_general")
         return ["general"]
 
     client = OpenAI(api_key=settings.openai_api_key)
@@ -148,11 +151,11 @@ def classify_argument_topic(argument: str) -> List[str]:
         if not valid_categories:
             valid_categories = ["general"]
 
-        print(f"[INFO topic_classifier] Argument classified: {valid_categories}")
+        logger.debug("argument_classified", categories=valid_categories)
         return valid_categories
 
     except Exception as e:
-        print(f"[ERROR topic_classifier] Classification error: {e}")
+        logger.error("classification_failed", detail=str(e))
         return ["general"]
 
 
@@ -179,7 +182,7 @@ def get_agents_for_argument(argument: str) -> List[str]:
                 agents.append(agent)
                 seen.add(agent)
 
-    print(f"[INFO topic_classifier] Agents selected: {agents}")
+    logger.debug("agents_selected", agents=agents)
     return agents
 
 

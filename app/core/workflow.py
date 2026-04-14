@@ -10,6 +10,7 @@ This module contains the `process_video` function that orchestrates the entire w
 - Report generation
 """
 import os
+import time
 from typing import Dict, List, Any
 
 from app.utils.youtube import extract_video_id
@@ -41,6 +42,9 @@ from app.constants import (
     AnalysisMode,
     TRANSCRIPT_MIN_LENGTH
 )
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 async def process_video(
     youtube_url: str,
@@ -83,7 +87,7 @@ async def process_video(
 
             if requested_analysis and requested_analysis.get("status") == "completed":
                 # Requested mode is available - return in consistent format
-                print(f"[INFO] Cache hit for mode '{analysis_mode.value}'")
+                logger.info("cache_hit", video_id=video_id, mode=analysis_mode.value)
 
                 # Extract content from cached analysis
                 cached_content = requested_analysis.get("content", {})
@@ -96,14 +100,14 @@ async def process_video(
                     **cached_content  # Spread cached content (includes argument_structure, enriched_thesis_arguments, etc.)
                 }
 
-                print(f"[DEBUG] Returning cached analysis for mode '{analysis_mode.value}'")
+                logger.debug("returning_cached_analysis", video_id=video_id, mode=analysis_mode.value)
                 return result
             else:
                 # Requested mode not available, need to generate it
-                print(f"[INFO] Mode '{analysis_mode.value}' not found in cache, generating new analysis")
+                logger.info("cache_miss_mode", video_id=video_id, mode=analysis_mode.value)
         else:
             # Video not in database at all
-            print(f"[INFO] No cache found for video {video_id}, starting new analysis")
+            logger.info("cache_miss_new", video_id=video_id)
 
     # Step 2: Extract transcript
     transcript_text = extract_transcript(youtube_url, youtube_cookies=youtube_cookies)
@@ -111,9 +115,17 @@ async def process_video(
         raise ValueError("Transcript not found or too short")
 
     # Step 3: Extract arguments with language detection (now returns ArgumentStructure)
+    t_args = time.time()
     language, argument_structure = extract_arguments(transcript_text, video_id=video_id)
-    print(f"[INFO workflow] Video language: {language}")
-    print(f"[INFO workflow] Found {argument_structure.total_chains} reasoning chains with {argument_structure.total_arguments} total arguments")
+    logger.info(
+        "step_end",
+        video_id=video_id,
+        step="argument_extraction",
+        duration_ms=int((time.time() - t_args) * 1000),
+        language=language,
+        chains_count=argument_structure.total_chains,
+        args_count=argument_structure.total_arguments,
+    )
 
     if not argument_structure.reasoning_chains:
         no_args_message = "No arguments found in this video." if language == "en" else "Aucun argument trouvé dans cette vidéo."
@@ -143,11 +155,19 @@ async def process_video(
         }
         thesis_arguments.append(thesis_arg)
 
-    print(f"[INFO workflow] Researching {len(thesis_arguments)} thesis-level arguments")
+    logger.info("step_start", video_id=video_id, step="parallel_research", thesis_count=len(thesis_arguments))
 
     # Process thesis arguments in parallel for better performance
+    t_research = time.time()
     enriched_thesis_arguments = await research_all_arguments_parallel(thesis_arguments, analysis_mode=analysis_mode)
-    
+    logger.info(
+        "step_end",
+        video_id=video_id,
+        step="parallel_research",
+        duration_ms=int((time.time() - t_research) * 1000),
+        enriched_count=len(enriched_thesis_arguments),
+    )
+
     # Step 6: Reliability calculation
     try:
         items_for_aggregation = [
@@ -173,7 +193,7 @@ async def process_video(
             final_thesis_arguments.append(original_arg)
 
     except Exception as e:
-        print(f"[ERROR] Aggregation error: {e}")
+        logger.error("aggregation_failed", video_id=video_id, step="aggregation", detail=str(e))
         final_thesis_arguments = enriched_thesis_arguments
 
     # Report generation
@@ -204,19 +224,18 @@ async def process_video(
     # Save to database
     try:
         await save_analysis(video_id, youtube_url, result, analysis_mode=analysis_mode)
-        print(f"[INFO] Analysis saved for {video_id} (mode: {analysis_mode})")
+        logger.info("analysis_saved", video_id=video_id, mode=analysis_mode.value)
 
         # After save, fetch available analyses to include in response
         from datetime import datetime
         available_data = await get_available_analyses(video_id)
         if available_data:
-            print(f"[DEBUG] available_data.analyses keys: {available_data.get('analyses', {}).keys()}")
+            logger.debug("available_analyses_keys", video_id=video_id, keys=list(available_data.get('analyses', {}).keys()))
             # Build available_analyses array with metadata
             available_analyses = build_available_analyses_metadata(available_data)
 
             # Add cache_info to result
-            print(f"[DEBUG] Final available_analyses count: {len(available_analyses)}")
-            print(f"[DEBUG] Final available_analyses: {available_analyses}")
+            logger.debug("available_analyses_built", video_id=video_id, count=len(available_analyses))
 
             # Ensure timestamps are serializable
             updated_at = available_data.get("updated_at")
@@ -237,7 +256,7 @@ async def process_video(
                 "available_analyses": available_analyses
             }
     except Exception as e:
-        print(f"[ERROR] Database save error: {e}")
+        logger.error("database_save_failed", video_id=video_id, step="save", detail=str(e))
 
     return result
 
@@ -284,7 +303,7 @@ async def process_video_with_progress(
                     **cached_content  # Spread cached content (includes argument_structure, enriched_thesis_arguments, etc.)
                 }
 
-                print(f"[DEBUG] Returning cached analysis for mode '{analysis_mode.value}'")
+                logger.debug("returning_cached_analysis", video_id=video_id, mode=analysis_mode.value)
                 return result
             else:
                 # Requested mode not available, need to generate it
@@ -373,7 +392,7 @@ async def process_video_with_progress(
             final_thesis_arguments.append(original_arg)
 
     except Exception as e:
-        print(f"[ERROR] Aggregation error: {e}")
+        logger.error("aggregation_failed", video_id=video_id, step="aggregation", detail=str(e))
         final_thesis_arguments = enriched_thesis_arguments
 
     # Step 8: Report generation
@@ -411,13 +430,12 @@ async def process_video_with_progress(
         from datetime import datetime
         available_data = await get_available_analyses(video_id)
         if available_data:
-            print(f"[DEBUG] available_data.analyses keys: {available_data.get('analyses', {}).keys()}")
+            logger.debug("available_analyses_keys", video_id=video_id, keys=list(available_data.get('analyses', {}).keys()))
             # Build available_analyses array with metadata
             available_analyses = build_available_analyses_metadata(available_data)
 
             # Add cache_info to result
-            print(f"[DEBUG] Final available_analyses count: {len(available_analyses)}")
-            print(f"[DEBUG] Final available_analyses: {available_analyses}")
+            logger.debug("available_analyses_built", video_id=video_id, count=len(available_analyses))
 
             # Ensure timestamps are serializable
             updated_at = available_data.get("updated_at")
@@ -438,7 +456,7 @@ async def process_video_with_progress(
                 "available_analyses": available_analyses
             }
     except Exception as e:
-        print(f"[ERROR] Database save error: {e}")
+        logger.error("database_save_failed", video_id=video_id, step="save", detail=str(e))
 
     await progress_callback("complete", 100, "Analysis complete!")
     return result

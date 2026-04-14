@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_smart_model: str = "gpt-4o"
 
+    # Logging
+    log_level: str = "INFO"
+
     # API Security
     allowed_api_keys: str = ""
     admin_password: Optional[str] = None

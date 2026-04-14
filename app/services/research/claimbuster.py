@@ -8,6 +8,9 @@ from typing import List, Dict
 import requests
 
 from ...config import get_settings
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 from .constants_news import (
     CLAIMBUSTER_BASE_URL,
     CLAIMBUSTER_SCORE_ENDPOINT,
@@ -86,7 +89,7 @@ def score_claim_claimbuster(text: str) -> float:
             return float(results[0].get("score", 0.0))
 
     except Exception as e:
-        print(f"     ❌ ClaimBuster scoring error: {e}")
+        logger.error("claimbuster_scoring_error", detail=str(e))
 
     return 0.0
 
@@ -115,13 +118,13 @@ def search_claimbuster(
     api_key = settings.claimbuster_api_key
 
     if not api_key:
-        print("[INFO factcheck] ClaimBuster API key not configured, skipping")
+        logger.warning("claimbuster_no_api_key")
         return []
 
     if not query or len(query.strip()) < 10:
         return []
 
-    print(f"[INFO factcheck] Analyzing with ClaimBuster: '{query[:50]}...'")
+    logger.info("claimbuster_search_start", query_preview=query[:50])
 
     claims = []
     try:
@@ -152,7 +155,7 @@ def search_claimbuster(
         claims = claims[:max_results]
 
     except Exception as e:
-        print(f"     ❌ ClaimBuster error: {e}")
+        logger.error("claimbuster_error", detail=str(e))
 
-    print(f"     ✅ Found {len(claims)} checkworthy claims")
+    logger.info("claimbuster_search_end", claims_count=len(claims))
     return claims

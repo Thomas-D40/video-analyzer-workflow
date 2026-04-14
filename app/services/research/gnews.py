@@ -8,6 +8,9 @@ from typing import List, Dict
 import requests
 
 from ...config import get_settings
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 from .constants_news import (
     GNEWS_BASE_URL,
     GNEWS_DEFAULT_LANGUAGE,
@@ -40,13 +43,13 @@ def search_gnews(
     api_key = settings.gnews_api_key
 
     if not api_key:
-        print("[INFO news] GNews API key not configured, skipping GNews")
+        logger.warning("gnews_no_api_key")
         return []
 
     if not query or len(query.strip()) < 3:
         return []
 
-    print(f"[INFO news] Searching GNews: '{query}'")
+    logger.info("gnews_search_start", query_preview=query[:50])
 
     articles = []
     try:
@@ -77,12 +80,12 @@ def search_gnews(
                 })
         else:
             error_msg = data.get("errors", ["Unknown error"])[0] if "errors" in data else "Unknown error"
-            print(f"     ❌ GNews error: {error_msg}")
+            logger.error("gnews_error", message=error_msg)
 
     except requests.exceptions.RequestException as e:
-        print(f"     ❌ GNews request error: {e}")
+        logger.error("gnews_error", detail=str(e))
     except Exception as e:
-        print(f"     ❌ GNews error: {e}")
+        logger.error("gnews_error", detail=str(e))
 
-    print(f"     ✅ Found {len(articles)} GNews articles")
+    logger.info("gnews_search_end", articles_count=len(articles))
     return articles

@@ -10,6 +10,9 @@ Rate Limits: Free tier allows reasonable usage without API key
 from typing import List, Dict
 import requests
 import time
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def search_core(query: str, max_results: int = 5) -> List[Dict[str, str]]:
@@ -63,7 +66,7 @@ def search_core(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         articles = []
 
         if "results" not in data or not data["results"]:
-            print(f"[CORE] No results for: {query}")
+            logger.debug("core_no_results", query=query)
             return []
 
         for paper in data["results"]:
@@ -142,15 +145,15 @@ def search_core(query: str, max_results: int = 5) -> List[Dict[str, str]]:
 
             articles.append(article)
 
-        print(f"[CORE] {len(articles)} open access articles found for: {query}")
+        logger.info("core_search_end", articles_count=len(articles), query=query)
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[CORE] Timeout during search: {query}")
+        logger.warning("core_timeout", query=query)
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[CORE] Error during search: {e}")
+        logger.error("core_search_error", detail=str(e))
         return []
     except Exception as e:
-        print(f"[CORE] Unexpected error: {e}")
+        logger.error("core_unexpected_error", detail=str(e))
         return []

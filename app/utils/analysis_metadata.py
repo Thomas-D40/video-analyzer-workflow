@@ -3,6 +3,9 @@ Utility functions for building analysis metadata.
 """
 from datetime import datetime
 from typing import Dict, List, Any
+from ..logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def build_available_analyses_metadata(available_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -38,7 +41,7 @@ def build_available_analyses_metadata(available_data: Dict[str, Any]) -> List[Di
                         dt = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
                         age_days = (datetime.utcnow() - dt).days
                     except Exception as e:
-                        print(f"[WARN] Could not parse date {updated_at}: {e}")
+                        logger.warning("date_parse_error", updated_at=str(updated_at), detail=str(e))
                 elif isinstance(updated_at, datetime):
                     age_days = (datetime.utcnow() - updated_at).days
 

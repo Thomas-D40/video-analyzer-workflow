@@ -8,6 +8,9 @@ from typing import List, Dict
 import requests
 
 from ...config import get_settings
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 from .constants_news import (
     GOOGLE_FACTCHECK_BASE_URL,
     GOOGLE_FACTCHECK_DEFAULT_LANGUAGE,
@@ -51,13 +54,13 @@ def search_google_factcheck(
     api_key = settings.google_factcheck_api_key
 
     if not api_key:
-        print("[INFO factcheck] Google Fact Check API key not configured, skipping")
+        logger.warning("factcheck_no_api_key")
         return []
 
     if not query or len(query.strip()) < 3:
         return []
 
-    print(f"[INFO factcheck] Searching Google Fact Check: '{query}'")
+    logger.info("factcheck_search_start", query_preview=query[:50])
 
     claims = []
     try:
@@ -105,12 +108,12 @@ def search_google_factcheck(
                 })
         else:
             error = data.get("error", {})
-            print(f"     ❌ Google Fact Check error: {error.get('message', 'Unknown error')}")
+            logger.error("factcheck_error", message=error.get('message', 'Unknown error'))
 
     except requests.exceptions.RequestException as e:
-        print(f"     ❌ Google Fact Check request error: {e}")
+        logger.error("factcheck_error", detail=str(e))
     except Exception as e:
-        print(f"     ❌ Google Fact Check error: {e}")
+        logger.error("factcheck_error", detail=str(e))
 
-    print(f"     ✅ Found {len(claims)} fact-checked claims")
+    logger.info("factcheck_search_end", claims_count=len(claims))
     return claims

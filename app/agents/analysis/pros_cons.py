@@ -3,6 +3,9 @@ import json
 import hashlib
 from openai import OpenAI
 from ...config import get_settings
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 from ...constants import (
     PROS_CONS_MAX_CONTENT_LENGTH,
     PROS_CONS_MIN_PARTIAL_CONTENT,
@@ -76,11 +79,10 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
     if not settings.openai_api_key:
         raise ValueError("OPENAI_API_KEY not configured in environment variables")
 
-    print(f"[DEBUG extract_pros_cons] Argument: {argument[:50]}...")
-    print(f"[DEBUG extract_pros_cons] Number of articles received: {len(articles)}")
+    logger.debug("pros_cons_input", argument_preview=argument[:50], articles_count=len(articles))
 
     if not argument or not articles:
-        print(f"[DEBUG extract_pros_cons] Empty return: argument={bool(argument)}, articles={len(articles) if articles else 0}")
+        logger.debug("pros_cons_empty", has_argument=bool(argument), articles_count=len(articles) if articles else 0)
         return {"pros": [], "cons": []}
 
     # Generate a unique ID for the argument if not provided
@@ -122,7 +124,7 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
         articles_context += article_text
         current_length += len(article_text)
 
-    print(f"[DEBUG extract_pros_cons] Content stats: {fulltext_count} full texts, {abstract_count} abstracts, {current_length} total chars")
+    logger.debug("pros_cons_content", fulltext_count=fulltext_count, abstract_count=abstract_count, total_chars=current_length)
 
     if len(articles) > 0 and not articles_context:
          # Fallback if the first article is too long
@@ -159,8 +161,8 @@ def extract_pros_cons(argument: str, articles: List[Dict], argument_id: str = ""
         }
 
     except json.JSONDecodeError as e:
-        print(f"JSON parsing error from OpenAI response (pros/cons): {e}")
+        logger.error("pros_cons_json_error", detail=str(e))
         return {"pros": [], "cons": []}
     except Exception as e:
-        print(f"Error during pros/cons extraction: {e}")
+        logger.error("pros_cons_failed", detail=str(e))
         return {"pros": [], "cons": []}

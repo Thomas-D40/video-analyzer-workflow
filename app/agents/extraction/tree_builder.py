@@ -8,7 +8,9 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-logger = logging.getLogger(__name__)
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 # ============================================================================
 # DATA STRUCTURES
@@ -435,17 +437,17 @@ def print_tree(chain: ReasoningChain, indent: int = 0):
     """
     prefix = "  " * indent
 
-    # Print thesis
-    print(f"{prefix}[THESIS] {chain.thesis.argument_en[:80]}")
+    # Log thesis
+    logger.debug("tree_thesis", text=f"{prefix}[THESIS] {chain.thesis.argument_en[:80]}")
 
-    # Print sub-arguments
+    # Log sub-arguments
     for sub in chain.thesis.sub_arguments:
-        print(f"{prefix}  [SUB] {sub.argument_en[:80]}")
+        logger.debug("tree_sub", text=f"{prefix}  [SUB] {sub.argument_en[:80]}")
         for ev in sub.evidence:
-            print(f"{prefix}    [EVIDENCE] {ev.argument_en[:80]}")
+            logger.debug("tree_evidence", text=f"{prefix}    [EVIDENCE] {ev.argument_en[:80]}")
 
-    # Print counter-arguments
+    # Log counter-arguments
     for counter in chain.thesis.counter_arguments:
-        print(f"{prefix}  [COUNTER] {counter.argument_en[:80]}")
+        logger.debug("tree_counter", text=f"{prefix}  [COUNTER] {counter.argument_en[:80]}")
         for ev in counter.evidence:
-            print(f"{prefix}    [EVIDENCE] {ev.argument_en[:80]}")
+            logger.debug("tree_evidence", text=f"{prefix}    [EVIDENCE] {ev.argument_en[:80]}")

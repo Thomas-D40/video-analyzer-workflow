@@ -6,6 +6,9 @@ sur ArXiv. Il attend une requête optimisée générée par l'orchestrateur.
 """
 from typing import List, Dict
 import arxiv
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 def search_arxiv(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
@@ -21,7 +24,7 @@ def search_arxiv(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     if not query or len(query.strip()) < 5:
         return []
     
-    print(f"[INFO science] Recherche ArXiv: '{query}'")
+    logger.info("arxiv_search_start", query_preview=query[:50])
     
     articles = []
     try:
@@ -49,6 +52,6 @@ def search_arxiv(query: str, max_results: int = 5) -> List[Dict[str, str]]:
             })
             
     except Exception as e:
-        print(f"     ❌ Erreur ArXiv: {e}")
+        logger.error("arxiv_search_error", detail=str(e))
 
     return articles
