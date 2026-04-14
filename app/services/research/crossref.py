@@ -9,6 +9,9 @@ Rate Limits: Variable based on "polite" usage (with contact email)
 """
 from typing import List, Dict, Optional
 import requests
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
@@ -58,7 +61,7 @@ def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         articles = []
 
         if "message" not in data or "items" not in data["message"]:
-            print(f"[CrossRef] No results for: {query}")
+            logger.debug("crossref_no_results", query=query)
             return []
 
         for item in data["message"]["items"]:
@@ -139,17 +142,17 @@ def search_crossref(query: str, max_results: int = 5) -> List[Dict[str, str]]:
 
             articles.append(article)
 
-        print(f"[CrossRef] {len(articles)} publications found for: {query}")
+        logger.info("crossref_search_end", articles_count=len(articles), query=query)
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[CrossRef] Timeout during search: {query}")
+        logger.warning("crossref_timeout", query=query)
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[CrossRef] Error during search: {e}")
+        logger.error("crossref_search_error", detail=str(e))
         return []
     except Exception as e:
-        print(f"[CrossRef] Unexpected error: {e}")
+        logger.error("crossref_unexpected_error", detail=str(e))
         return []
 
 
@@ -174,5 +177,5 @@ def get_citation_count(doi: str) -> Optional[int]:
         data = response.json()
         return data.get("message", {}).get("is-referenced-by-count", 0)
     except Exception as e:
-        print(f"[CrossRef] Error retrieving citations for {doi}: {e}")
+        logger.error("crossref_citations_error", doi=doi, detail=str(e))
         return None

@@ -1,5 +1,8 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from ..config import get_settings
+from ..logger import get_logger
+
+logger = get_logger(__name__)
 
 class MongoDB:
     client: AsyncIOMotorClient = None
@@ -17,7 +20,7 @@ async def get_database():
         # Création du client Motor
         db.client = AsyncIOMotorClient(settings.database_url)
         db.db = db.client[settings.mongo_db_name]
-        print(f"[INFO] Connecté à MongoDB: {settings.mongo_db_name}")
+        logger.info("mongo_connected", db_name=settings.mongo_db_name)
 
         # Ensure indexes exist for performance
         await _ensure_indexes()
@@ -47,11 +50,11 @@ async def _ensure_indexes():
         name="updated_at_index"
     )
 
-    print("[INFO] Index MongoDB créés: video_analyses (youtube_url, updated_at)")
+    logger.info("mongo_indexes_created", collection="video_analyses", fields="youtube_url, updated_at")
 
 async def close_mongo_connection():
     """Ferme la connexion MongoDB."""
     if db.client:
         db.client.close()
         db.client = None
-        print("[INFO] Connexion MongoDB fermée")
+        logger.info("mongo_connection_closed")

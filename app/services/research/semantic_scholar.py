@@ -10,6 +10,9 @@ Rate Limits: 100 requests per 5 minutes (no API key required)
 from typing import List, Dict
 import requests
 import time
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
@@ -58,7 +61,7 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, 
         articles = []
 
         if "data" not in data or not data["data"]:
-            print(f"[Semantic Scholar] No results for: {query}")
+            logger.debug("semantic_scholar_no_results", query=query)
             return []
 
         for paper in data["data"]:
@@ -102,17 +105,17 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, 
 
             articles.append(article)
 
-        print(f"[Semantic Scholar] {len(articles)} articles found for: {query}")
+        logger.info("semantic_scholar_search_end", articles_count=len(articles), query=query)
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[Semantic Scholar] Timeout during search: {query}")
+        logger.warning("semantic_scholar_timeout", query=query)
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[Semantic Scholar] Error during search: {e}")
+        logger.error("semantic_scholar_search_error", detail=str(e))
         return []
     except Exception as e:
-        print(f"[Semantic Scholar] Unexpected error: {e}")
+        logger.error("semantic_scholar_unexpected_error", detail=str(e))
         return []
 
 
@@ -136,5 +139,5 @@ def get_paper_details(paper_id: str) -> Dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"[Semantic Scholar] Error retrieving details: {e}")
+        logger.error("semantic_scholar_details_error", detail=str(e))
         return {}

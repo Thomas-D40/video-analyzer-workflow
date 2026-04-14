@@ -11,7 +11,6 @@ from pydantic import BaseModel, HttpUrl, Field
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import os
-import logging
 import asyncio
 import json
 
@@ -21,6 +20,8 @@ from app.core.auth import verify_api_key, verify_admin_password
 from app.services.storage import submit_rating, get_available_analyses
 from app.utils.youtube import extract_video_id
 from app.constants import AnalysisMode, AnalysisStatus
+from app.logger import get_logger
+from app.logger.config import configure_logging
 
 
 def count_arguments_from_content(content: Dict[str, Any]) -> int:
@@ -44,12 +45,8 @@ def count_arguments_from_content(content: Dict[str, Any]) -> int:
 
     return 0
 
-# Configuration du logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+configure_logging(get_settings().log_level)
+logger = get_logger(__name__)
 
 # Configuration
 os.environ.setdefault("DATABASE_URL", "mongodb://localhost:27017")
@@ -489,9 +486,7 @@ async def get_available_analyses_endpoint(video_id: str):
         )
 
     except Exception as e:
-        import traceback
-        print(f"[ERROR] get_available_analyses_endpoint: {str(e)}")
-        print(traceback.format_exc())
+        logger.error("get_available_analyses_endpoint failed", video_id=video_id, detail=str(e))
         raise HTTPException(status_code=500, detail=f"Error fetching analyses: {str(e)}")
 
 

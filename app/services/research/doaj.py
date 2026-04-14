@@ -9,6 +9,9 @@ Rate Limits: Reasonable usage without API key
 """
 from typing import List, Dict
 import requests
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def search_doaj(query: str, max_results: int = 5) -> List[Dict[str, str]]:
@@ -65,7 +68,7 @@ def search_doaj(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         # Check if results exist
         results = data.get("results", [])
         if not results:
-            print(f"[DOAJ] No results for: {query}")
+            logger.debug("doaj_no_results", query=query)
             return []
 
         for item in results:
@@ -146,17 +149,17 @@ def search_doaj(query: str, max_results: int = 5) -> List[Dict[str, str]]:
 
             articles.append(article)
 
-        print(f"[DOAJ] {len(articles)} open access articles found for: {query}")
+        logger.info("doaj_search_end", articles_count=len(articles), query=query)
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[DOAJ] Timeout during search: {query}")
+        logger.warning("doaj_timeout", query=query)
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[DOAJ] Error during search: {e}")
+        logger.error("doaj_search_error", detail=str(e))
         return []
     except Exception as e:
-        print(f"[DOAJ] Unexpected error: {e}")
+        logger.error("doaj_unexpected_error", detail=str(e))
         return []
 
 
@@ -206,9 +209,9 @@ def search_doaj_journals(query: str, max_results: int = 5) -> List[Dict[str, str
 
             journals.append(journal)
 
-        print(f"[DOAJ] {len(journals)} open access journals found for: {query}")
+        logger.info("doaj_journals_search_end", journals_count=len(journals), query=query)
         return journals
 
     except Exception as e:
-        print(f"[DOAJ] Error searching journals: {e}")
+        logger.error("doaj_journals_search_error", detail=str(e))
         return []

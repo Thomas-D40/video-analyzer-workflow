@@ -11,6 +11,9 @@ Rate Limits: Generous limits for reasonable usage
 from typing import List, Dict
 import requests
 import time
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def search_europepmc(query: str, max_results: int = 5) -> List[Dict[str, str]]:
@@ -73,7 +76,7 @@ def search_europepmc(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         results = result_list.get("result", [])
 
         if not results:
-            print(f"[Europe PMC] No results for: {query}")
+            logger.debug("europepmc_no_results", query=query)
             return []
 
         for item in results:
@@ -161,17 +164,17 @@ def search_europepmc(query: str, max_results: int = 5) -> List[Dict[str, str]]:
 
             articles.append(article)
 
-        print(f"[Europe PMC] {len(articles)} articles found for: {query}")
+        logger.info("europepmc_search_end", articles_count=len(articles), query=query)
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[Europe PMC] Timeout during search: {query}")
+        logger.warning("europepmc_timeout", query=query)
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[Europe PMC] Error during search: {e}")
+        logger.error("europepmc_search_error", detail=str(e))
         return []
     except Exception as e:
-        print(f"[Europe PMC] Unexpected error: {e}")
+        logger.error("europepmc_unexpected_error", detail=str(e))
         return []
 
 
@@ -202,5 +205,5 @@ def get_fulltext_xml(pmcid: str) -> str:
         response.raise_for_status()
         return response.text
     except Exception as e:
-        print(f"[Europe PMC] Error retrieving full text XML for {pmcid}: {e}")
+        logger.error("europepmc_fulltext_error", pmcid=pmcid, detail=str(e))
         return ""

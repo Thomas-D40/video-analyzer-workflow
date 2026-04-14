@@ -9,6 +9,9 @@ import requests
 from datetime import datetime, timedelta
 
 from ...config import get_settings
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 from .constants_news import (
     NEWSAPI_BASE_URL,
     NEWSAPI_DEFAULT_LANGUAGE,
@@ -45,13 +48,13 @@ def search_newsapi(
     api_key = settings.newsapi_key
 
     if not api_key:
-        print("[INFO news] NewsAPI key not configured, skipping NewsAPI")
+        logger.warning("newsapi_no_api_key")
         return []
 
     if not query or len(query.strip()) < 3:
         return []
 
-    print(f"[INFO news] Searching NewsAPI: '{query}'")
+    logger.info("newsapi_search_start", query_preview=query[:50])
 
     articles = []
     try:
@@ -91,12 +94,12 @@ def search_newsapi(
                     "access_note": "News article - external link"
                 })
         else:
-            print(f"     ❌ NewsAPI error: {data.get('message', 'Unknown error')}")
+            logger.error("newsapi_error", message=data.get('message', 'Unknown error'))
 
     except requests.exceptions.RequestException as e:
-        print(f"     ❌ NewsAPI request error: {e}")
+        logger.error("newsapi_error", detail=str(e))
     except Exception as e:
-        print(f"     ❌ NewsAPI error: {e}")
+        logger.error("newsapi_error", detail=str(e))
 
-    print(f"     ✅ Found {len(articles)} NewsAPI articles")
+    logger.info("newsapi_search_end", articles_count=len(articles))
     return articles

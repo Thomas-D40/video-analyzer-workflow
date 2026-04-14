@@ -8,6 +8,9 @@ import datetime
 import json
 from openai import OpenAI
 from ..config import get_settings
+from ..logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _get_access_icon(access_type: str) -> str:
@@ -59,7 +62,7 @@ def _translate_to_french(text: str) -> str:
 
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"[ERROR report_formatter] Translation error: {e}")
+        logger.error("report_formatter_translation_error", detail=str(e))
         return text
 
 

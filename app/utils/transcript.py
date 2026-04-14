@@ -13,6 +13,9 @@ import os
 import re
 import uuid
 import json
+from ..logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optional[str]:
@@ -41,25 +44,25 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
             
             # DEBUG: Vérifier le contenu du fichier
             file_size = os.path.getsize(cookie_file_path)
-            print(f"[DEBUG] Cookie file created: {cookie_file_path} (Size: {file_size} bytes)")
+            logger.debug("transcript_cookie_file_created", path=cookie_file_path, size_bytes=file_size)
             with open(cookie_file_path, 'r') as f:
                 head = [next(f) for _ in range(5)]
-            print(f"[DEBUG] Cookie file head:\n{''.join(head)}")
-            
+            logger.debug("transcript_cookie_file_head", head=''.join(head))
+
         except Exception as e:
-            print(f"[WARN] Failed to create cookie file: {e}")
+            logger.warning("transcript_cookie_file_failed", detail=str(e))
             cookie_file_path = None
             
     try:
         # Extraire l'ID de la vidéo
         video_id = _extract_video_id(youtube_url)
         if not video_id:
-            print("[ERROR] Impossible d'extraire l'ID de la vidéo")
+            logger.error("transcript_extract_id_failed")
             return None
 
         # Méthode 1: youtube-transcript-api
         try:
-            print(f"[INFO] Tentative youtube-transcript-api pour {video_id} (cookies={bool(cookie_file_path)})")
+            logger.info("transcript_ytapi_attempt", video_id=video_id, has_cookies=bool(cookie_file_path))
             
             # On passe le chemin du fichier de cookies s'il existe
             transcript_list = YouTubeTranscriptApi.get_transcript(
@@ -72,16 +75,16 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
             transcript_text = ' '.join([entry['text'] for entry in transcript_list])
             
             if transcript_text and len(transcript_text.strip()) > 100:
-                print(f"[INFO] Succès youtube-transcript-api ({len(transcript_text)} chars)")
+                logger.info("transcript_ytapi_success", chars=len(transcript_text))
                 return transcript_text.strip()
-                
+
         except Exception as e:
             # Expected fallback behavior - log warning without full traceback
-            print(f"[WARN] Echec youtube-transcript-api: {e}")
+            logger.warning("transcript_ytapi_failed", detail=str(e))
             # On continue vers le fallback yt-dlp
-            
+
         # Méthode 2: yt-dlp (Fallback)
-        print(f"[INFO] Tentative fallback yt-dlp pour {youtube_url}")
+        logger.info("transcript_ytdlp_attempt", youtube_url=youtube_url)
         return _extract_transcript_ytdlp(youtube_url, cookie_file_path)
         
     finally:
@@ -89,9 +92,9 @@ def extract_transcript(youtube_url: str, youtube_cookies: str = None) -> Optiona
         if cookie_file_path and os.path.exists(cookie_file_path):
             try:
                 os.remove(cookie_file_path)
-                print("[DEBUG] Cookie file cleaned up")
+                logger.debug("transcript_cookie_file_cleaned_up")
             except Exception as e:
-                print(f"[WARN] Failed to cleanup cookie file: {e}")
+                logger.warning("transcript_cookie_cleanup_failed", detail=str(e))
 
 
 def _extract_video_id(youtube_url: str) -> Optional[str]:
@@ -127,7 +130,7 @@ def _extract_transcript_ytdlp(youtube_url: str, cookie_file: str = None) -> Opti
             'cookiefile': cookie_file if cookie_file and os.path.exists(cookie_file) else None
         }
         
-        print(f"[DEBUG] Starting yt-dlp Phase 1 (Metadata) with cookies={bool(cookie_file)}")
+        logger.debug("transcript_ytdlp_phase1_start", has_cookies=bool(cookie_file))
         with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
             # extract_info avec download=False et listsubtitles=True devrait retourner les infos
             # sans planter sur les formats vidéo
@@ -150,19 +153,17 @@ def _extract_transcript_ytdlp(youtube_url: str, cookie_file: str = None) -> Opti
                     url = subtitle_info.get('url') if isinstance(subtitle_info, dict) else subtitle_info
                     
                     if url:
-                        print(f"[DEBUG] Found subtitle URL for {lang}, downloading...")
+                        logger.debug("transcript_subtitle_url_found", lang=lang)
                         # Télécharger avec cookies
                         transcript = _download_subtitle_url(url, cookie_file)
                         if transcript:
                             return transcript
                             
-        print("[WARN] No suitable subtitles found in metadata")
+        logger.warning("transcript_no_subtitles_found")
         return None
-        
+
     except Exception as e:
-        print(f"[ERROR] yt-dlp fallback failed: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error("transcript_ytdlp_failed", detail=str(e))
         return None
 
 

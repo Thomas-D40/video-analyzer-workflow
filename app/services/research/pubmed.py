@@ -12,6 +12,9 @@ import requests
 import xml.etree.ElementTree as ET
 import time
 from ...config import get_settings
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 
 def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
@@ -66,7 +69,7 @@ def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         pmids = search_data.get("esearchresult", {}).get("idlist", [])
 
         if not pmids:
-            print(f"[PubMed] No results for: {query}")
+            logger.debug("pubmed_no_results", query=query)
             return []
 
         # Respect rate limits
@@ -156,21 +159,21 @@ def search_pubmed(query: str, max_results: int = 5) -> List[Dict[str, str]]:
                 articles.append(article)
 
             except Exception as e:
-                print(f"[PubMed] Error parsing article: {e}")
+                logger.warning("pubmed_parse_error", detail=str(e))
                 continue
 
-        print(f"[PubMed] {len(articles)} articles found for: {query}")
+        logger.info("pubmed_search_end", articles_count=len(articles), query=query)
         return articles
 
     except requests.exceptions.Timeout:
-        print(f"[PubMed] Timeout during search: {query}")
+        logger.warning("pubmed_timeout", query=query)
         return []
     except requests.exceptions.RequestException as e:
-        print(f"[PubMed] Error during search: {e}")
+        logger.error("pubmed_search_error", detail=str(e))
         return []
     except ET.ParseError as e:
-        print(f"[PubMed] XML parsing error: {e}")
+        logger.error("pubmed_xml_error", detail=str(e))
         return []
     except Exception as e:
-        print(f"[PubMed] Unexpected error: {e}")
+        logger.error("pubmed_unexpected_error", detail=str(e))
         return []

@@ -13,6 +13,9 @@ from typing import List, Dict
 import json
 from openai import OpenAI
 from ...config import get_settings
+from ...logger import get_logger
+
+logger = get_logger(__name__)
 from ...constants import (
     AGGREGATE_MAX_PROS_PER_ARG,
     AGGREGATE_MAX_CONS_PER_ARG,
@@ -239,11 +242,11 @@ def aggregate_results(items: List[Dict], video_id: str = "") -> Dict:
         }
 
     except json.JSONDecodeError as e:
-        print(f"JSON parsing error from OpenAI response (aggregation): {e}")
+        logger.error("aggregation_json_error", detail=str(e))
         # Fallback: return raw data with basic reliability
         return _fallback_aggregation(items)
     except Exception as e:
-        print(f"Error during aggregation: {e}")
+        logger.error("aggregation_failed", detail=str(e))
         return _fallback_aggregation(items)
 
 
