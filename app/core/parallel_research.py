@@ -3,10 +3,13 @@ Parallel research execution for arguments.
 
 This module provides async functions to execute research in parallel,
 significantly reducing total processing time.
+
+All research services are native async — no ThreadPoolExecutor needed.
+OpenAI-based agents (orchestration, analysis) remain synchronous and are
+wrapped with asyncio.to_thread().
 """
 import asyncio
 from typing import Dict, List, Any
-from concurrent.futures import ThreadPoolExecutor
 
 from app.services.research import (
     search_arxiv,
@@ -29,29 +32,9 @@ from app.agents.enrichment import (
     get_screening_stats,
 )
 from app.agents.analysis import extract_pros_cons
-from app.config import get_settings
 from app.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-# Thread pool for blocking I/O operations
-executor = ThreadPoolExecutor(max_workers=10)
-
-
-async def _run_in_executor(func, *args):
-    """
-    Run a synchronous function in a thread pool executor.
-
-    Args:
-        func: Synchronous function to run
-        *args: Arguments to pass to the function
-
-    Returns:
-        Result from the function
-    """
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(executor, func, *args)
 
 
 async def research_single_agent(
@@ -76,7 +59,7 @@ async def research_single_agent(
     try:
         logger.debug("agent_search_start", agent=agent_name, query_preview=query[:50])
 
-        # Map agent names to functions
+        # All research services are async — await directly
         agent_funcs = {
             "pubmed": lambda: search_pubmed(query, max_results),
             "europepmc": lambda: search_europepmc(query, max_results),
@@ -92,8 +75,7 @@ async def research_single_agent(
         if agent_name not in agent_funcs:
             return (agent_name, [], None)
 
-        # Run in thread pool (these are synchronous functions)
-        results = await _run_in_executor(agent_funcs[agent_name])
+        results = await agent_funcs[agent_name]()
 
         logger.debug("agent_search_end", agent=agent_name, results_count=len(results))
         return (agent_name, results, None)
@@ -116,14 +98,14 @@ async def research_argument_parallel(
         argument_text: Original argument text
         argument_en: English version for research
         arg_data: Original argument data
-        analysis_mode: "abstract_only" (fast, cheap) or "full_text_enrichment" (deep, expensive)
+        analysis_mode: "simple" (fast, cheap) or "medium"/"hard" (deep, expensive)
 
     Returns:
         Enriched argument with research results
     """
-    # Step 1: Determine research strategy
+    # Step 1: Determine research strategy (sync OpenAI call → thread)
     try:
-        strategy = await _run_in_executor(get_research_strategy, argument_en)
+        strategy = await asyncio.to_thread(get_research_strategy, argument_en)
         selected_agents = strategy["agents"]
         categories = strategy["categories"]
         logger.debug("research_strategy", categories=categories, agents=selected_agents)
@@ -132,9 +114,9 @@ async def research_argument_parallel(
         selected_agents = ["semantic_scholar", "crossref"]
         categories = ["general"]
 
-    # Step 2: Generate optimized queries
+    # Step 2: Generate optimized queries (sync OpenAI call → thread)
     try:
-        queries = await _run_in_executor(
+        queries = await asyncio.to_thread(
             generate_search_queries,
             argument_en,
             selected_agents
@@ -144,14 +126,12 @@ async def research_argument_parallel(
         queries = {}
 
     # Step 3: Execute all agent searches in parallel
-    tasks = []
-    for agent_name in selected_agents:
-        query = queries.get(agent_name, "")
-        if query:
-            task = research_single_agent(agent_name, query)
-            tasks.append(task)
+    tasks = [
+        research_single_agent(agent_name, queries.get(agent_name, ""))
+        for agent_name in selected_agents
+        if queries.get(agent_name, "")
+    ]
 
-    # Wait for all searches to complete
     results = await asyncio.gather(*tasks, return_exceptions=False)
 
     # Step 4: Collect all results
@@ -163,10 +143,7 @@ async def research_argument_parallel(
 
     logger.debug("sources_collected", argument_preview=argument_text[:50], total_sources=len(all_sources))
 
-    # Determine enrichment settings based on analysis mode
-    settings = get_settings()
-
-    # Map analysis modes to configuration
+    # Map analysis modes to enrichment configuration
     mode_config = {
         "simple": {"enabled": False, "top_n": 0, "min_score": 0.0},
         "medium": {"enabled": True, "top_n": 3, "min_score": 0.6},
@@ -180,12 +157,12 @@ async def research_argument_parallel(
 
     logger.info("enrichment_config", analysis_mode=analysis_mode, fulltext_top_n=top_n, min_score=min_score)
 
-    # Step 4.5: Enrichment - Screen for relevance
+    # Step 4.5: Enrichment - Screen for relevance (sync OpenAI call → thread)
     if enrichment_enabled and all_sources:
         try:
             logger.info("screening_start", sources_count=len(all_sources), top_n=top_n, min_score=min_score)
 
-            selected_sources, rejected_sources = await _run_in_executor(
+            selected_sources, rejected_sources = await asyncio.to_thread(
                 screen_sources_by_relevance,
                 argument_en,
                 all_sources,
@@ -194,7 +171,6 @@ async def research_argument_parallel(
                 min_score
             )
 
-            # Log screening stats
             stats = get_screening_stats(all_sources)
             logger.debug(
                 "screening_stats",
@@ -206,7 +182,6 @@ async def research_argument_parallel(
 
         except Exception as e:
             logger.error("screening_failed", detail=str(e))
-            # Fallback: use simple top-N selection
             selected_sources = all_sources[:top_n] if top_n > 0 else []
             rejected_sources = all_sources[top_n:] if top_n > 0 else all_sources
     else:
@@ -214,32 +189,22 @@ async def research_argument_parallel(
         selected_sources = []
         rejected_sources = all_sources
 
-    # Step 4.6: Enrichment - Fetch full text for top sources
-    web_fetch_enabled = getattr(settings, 'mcp_web_fetch_enabled', False)
-
-    if enrichment_enabled and web_fetch_enabled and selected_sources:
+    # Step 4.6: Enrichment - Fetch full text for top sources (async, parallel)
+    if enrichment_enabled and selected_sources:
         try:
             logger.info("fulltext_fetch_start", sources_count=len(selected_sources))
 
-            enhanced_sources = await _run_in_executor(
-                fetch_fulltext_for_sources,
-                selected_sources
-            )
+            enhanced_sources = await fetch_fulltext_for_sources(selected_sources)
 
-            # Count successful full-text retrievals
             fulltext_count = sum(1 for s in enhanced_sources if "fulltext" in s)
             logger.info("fulltext_fetch_end", retrieved=fulltext_count, requested=len(selected_sources))
 
-            # Combine: enhanced sources + rejected sources
             final_sources = enhanced_sources + rejected_sources
 
         except Exception as e:
             logger.error("fulltext_fetch_failed", detail=str(e))
-            # Fallback: use all sources without full text
             final_sources = all_sources
     else:
-        if not web_fetch_enabled:
-            logger.info("web_fetch_disabled")
         final_sources = all_sources
 
     # Reorganize final sources by type (for report)
@@ -258,20 +223,19 @@ async def research_argument_parallel(
         elif any(x in source_name for x in ["oecd", "world bank"]):
             sources_by_type["statistical"].append(source)
 
-    # Step 5: Pros/Cons Analysis (with mixed full-text + abstracts)
+    # Step 5: Pros/Cons Analysis (sync OpenAI call → thread)
     try:
         logger.info("pros_cons_start", sources_count=len(final_sources))
-        analysis = await _run_in_executor(
+        analysis = await asyncio.to_thread(
             extract_pros_cons,
             argument_en,
-            final_sources  # Mix of full-text + abstracts
+            final_sources
         )
         logger.info("pros_cons_end", pros_count=len(analysis.get('pros', [])), cons_count=len(analysis.get('cons', [])))
     except Exception as e:
         logger.error("pros_cons_failed", detail=str(e))
         analysis = {"pros": [], "cons": []}
 
-    # Build enriched object
     enriched_arg = arg_data.copy()
     enriched_arg["categories"] = categories
     enriched_arg["sources"] = sources_by_type
@@ -296,21 +260,12 @@ async def research_all_arguments_parallel(
 
     Returns:
         List of enriched arguments with research results
-
-    Example:
-        >>> arguments = [
-        ...     {"argument": "Coffee causes cancer", "argument_en": "Coffee causes cancer"},
-        ...     {"argument": "GDP is rising", "argument_en": "GDP is rising"}
-        ... ]
-        >>> enriched = await research_all_arguments_parallel(arguments, analysis_mode="medium")
-        >>> print(f"Processed {len(enriched)} arguments")
     """
     if not arguments:
         return []
 
     logger.info("parallel_research_start", args_count=len(arguments), analysis_mode=str(analysis_mode))
 
-    # Create tasks for each argument
     tasks = [
         research_argument_parallel(
             arg_data["argument"],
@@ -321,7 +276,6 @@ async def research_all_arguments_parallel(
         for arg_data in arguments
     ]
 
-    # Execute all argument research in parallel
     enriched_arguments = await asyncio.gather(*tasks, return_exceptions=False)
 
     logger.info("parallel_research_end", enriched_count=len(enriched_arguments))

@@ -8,13 +8,19 @@ API Documentation: https://www.semanticscholar.org/product/api
 Rate Limits: 100 requests per 5 minutes (no API key required)
 """
 from typing import List, Dict
-import requests
-import time
+
+import httpx
+
 from ...logger import get_logger
+from ..retry import RETRY_STRATEGY
 
 logger = get_logger(__name__)
 
-def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+_HEADERS = {"User-Agent": "VideoAnalyzerWorkflow/1.0 (Research Tool)"}
+
+
+@RETRY_STRATEGY
+async def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """
     Search for academic articles on Semantic Scholar.
 
@@ -36,90 +42,70 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> List[Dict[str, 
         - authors: List of authors
 
     Raises:
-        Exception: If the query fails after several attempts
+        httpx.HTTPStatusError: On HTTP 5xx / 429 after retries
+        httpx.TimeoutException: On timeout after retries
     """
     base_url = "https://api.semanticscholar.org/graph/v1/paper/search"
-
-    # Search parameters
     params = {
         "query": query,
         "limit": max_results,
         "fields": "title,abstract,year,citationCount,authors,url,openAccessPdf"
     }
 
-    # Recommended headers (optional but polite)
-    headers = {
-        "User-Agent": "VideoAnalyzerWorkflow/1.0 (Research Tool)"
-    }
-
-    try:
-        # Request with timeout
-        response = requests.get(base_url, params=params, headers=headers, timeout=10)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(base_url, params=params, headers=_HEADERS)
         response.raise_for_status()
-
         data = response.json()
-        articles = []
 
-        if "data" not in data or not data["data"]:
-            logger.debug("semantic_scholar_no_results", query=query)
-            return []
-
-        for paper in data["data"]:
-            # Extract authors
-            authors = []
-            if paper.get("authors"):
-                authors = [author.get("name", "") for author in paper["authors"][:3]]  # First 3 authors
-
-            # Build article URL
-            paper_id = paper.get("paperId", "")
-            paper_url = f"https://www.semanticscholar.org/paper/{paper_id}" if paper_id else paper.get("url", "")
-
-            # Get abstract
-            abstract = paper.get("abstract", "")
-            if not abstract:
-                abstract = f"Article from {paper.get('year', 'N/A')} with {paper.get('citationCount', 0)} citations"
-
-            # Determine access type
-            is_open_access = bool(paper.get("openAccessPdf"))
-            if is_open_access:
-                access_type = "open_access"
-                has_full_text = True
-                access_note = "Full text available (open access)"
-            else:
-                access_type = "abstract_only"
-                has_full_text = False
-                access_note = "Abstract only - full text may require subscription"
-
-            article = {
-                "title": paper.get("title", "Untitled"),
-                "url": paper_url,
-                "snippet": abstract[:500],  # Limit snippet length
-                "source": "Semantic Scholar",
-                "year": paper.get("year", "N/A"),
-                "citations": paper.get("citationCount", 0),
-                "authors": ", ".join(authors) if authors else "N/A",
-                "access_type": access_type,
-                "has_full_text": has_full_text,
-                "access_note": access_note
-            }
-
-            articles.append(article)
-
-        logger.info("semantic_scholar_search_end", articles_count=len(articles), query=query)
-        return articles
-
-    except requests.exceptions.Timeout:
-        logger.warning("semantic_scholar_timeout", query=query)
-        return []
-    except requests.exceptions.RequestException as e:
-        logger.error("semantic_scholar_search_error", detail=str(e))
-        return []
-    except Exception as e:
-        logger.error("semantic_scholar_unexpected_error", detail=str(e))
+    if "data" not in data or not data["data"]:
+        logger.debug("semantic_scholar_no_results", query=query)
         return []
 
+    articles = []
+    for paper in data["data"]:
+        authors = []
+        if paper.get("authors"):
+            authors = [a.get("name", "") for a in paper["authors"][:3]]
 
-def get_paper_details(paper_id: str) -> Dict:
+        paper_id = paper.get("paperId", "")
+        paper_url = (
+            f"https://www.semanticscholar.org/paper/{paper_id}" if paper_id
+            else paper.get("url", "")
+        )
+
+        abstract = paper.get("abstract", "")
+        if not abstract:
+            abstract = f"Article from {paper.get('year', 'N/A')} with {paper.get('citationCount', 0)} citations"
+
+        is_open_access = bool(paper.get("openAccessPdf"))
+        if is_open_access:
+            access_type = "open_access"
+            has_full_text = True
+            access_note = "Full text available (open access)"
+        else:
+            access_type = "abstract_only"
+            has_full_text = False
+            access_note = "Abstract only - full text may require subscription"
+
+        articles.append({
+            "title": paper.get("title", "Untitled"),
+            "url": paper_url,
+            "snippet": abstract[:500],
+            "source": "Semantic Scholar",
+            "year": paper.get("year", "N/A"),
+            "citations": paper.get("citationCount", 0),
+            "authors": ", ".join(authors) if authors else "N/A",
+            "access_type": access_type,
+            "has_full_text": has_full_text,
+            "access_note": access_note
+        })
+
+    logger.info("semantic_scholar_search_end", articles_count=len(articles), query=query)
+    return articles
+
+
+@RETRY_STRATEGY
+async def get_paper_details(paper_id: str) -> Dict:
     """
     Retrieve full details of an article by its Semantic Scholar ID.
 
@@ -135,9 +121,10 @@ def get_paper_details(paper_id: str) -> Dict:
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        return response.json()
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
     except Exception as e:
         logger.error("semantic_scholar_details_error", detail=str(e))
         return {}
