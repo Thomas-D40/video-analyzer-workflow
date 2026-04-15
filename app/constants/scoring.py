@@ -88,3 +88,17 @@ RATING_MIN = 0.0
 
 RATING_MAX = 5.0
 """Maximum user rating value."""
+
+
+# ============================================================================
+# CONSENSUS THRESHOLDS
+# ============================================================================
+
+CONSENSUS_STRONG_THRESHOLD = 0.80
+"""Minimum pros ratio for 'Strong consensus' label."""
+
+CONSENSUS_MODERATE_THRESHOLD = 0.60
+"""Minimum pros ratio for 'Moderate consensus' label."""
+
+CONSENSUS_CONTESTED_THRESHOLD = 0.40
+"""Minimum pros ratio for 'Contested — active scientific debate' label. Below this: 'Minority position'."""
