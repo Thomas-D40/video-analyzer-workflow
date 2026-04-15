@@ -87,6 +87,12 @@ python tests/test_research_services.py -v
 
 See `tests/README.md` for details.
 
+## Documentation
+
+- [`docs/architecture.md`](docs/architecture.md) — Package structure, agents, research services, database schema
+- [`docs/workflow.md`](docs/workflow.md) — End-to-end pipeline, argument extraction, analysis phases
+- [`docs/setup.md`](docs/setup.md) — Optional API keys setup and troubleshooting
+
 ## Configuration
 
 - Variables dans `.env` (voir `.env.example`):
