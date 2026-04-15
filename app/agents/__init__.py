@@ -33,7 +33,6 @@ from .enrichment import (
     screen_sources_by_relevance,
     get_screening_stats,
     fetch_fulltext_for_sources,
-    enhance_source_with_fulltext,
 )
 from .analysis import extract_pros_cons, aggregate_results
 
@@ -59,7 +58,6 @@ __all__ = [
     "screen_sources_by_relevance",
     "get_screening_stats",
     "fetch_fulltext_for_sources",
-    "enhance_source_with_fulltext",
     # Analysis
     "extract_pros_cons",
     "aggregate_results",
