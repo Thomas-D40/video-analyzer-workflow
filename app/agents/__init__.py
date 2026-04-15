@@ -25,6 +25,7 @@ from ..services.research import (
 )
 from .orchestration import (
     generate_search_queries,
+    generate_adversarial_queries,
     classify_argument_topic,
     get_agents_for_argument,
     get_research_strategy,
@@ -35,13 +36,14 @@ from .enrichment import (
     fetch_fulltext_for_sources,
     enhance_source_with_fulltext,
 )
-from .analysis import extract_pros_cons, aggregate_results
+from .analysis import extract_pros_cons, aggregate_results, compute_consensus
 
 __all__ = [
     # Extraction
     "extract_arguments",
     # Orchestration
     "generate_search_queries",
+    "generate_adversarial_queries",
     "classify_argument_topic",
     "get_agents_for_argument",
     "get_research_strategy",
@@ -63,4 +65,5 @@ __all__ = [
     # Analysis
     "extract_pros_cons",
     "aggregate_results",
+    "compute_consensus",
 ]

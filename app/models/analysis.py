@@ -6,6 +6,23 @@ from app.constants import AnalysisMode, AnalysisStatus, RATING_MIN, RATING_MAX
 
 
 # ============================================================================
+# ARGUMENT RESULT MODEL
+# ============================================================================
+
+class ArgumentResult(BaseModel):
+    """Enriched argument result with research analysis and consensus indicator."""
+    argument: str
+    pros: List[Dict[str, Any]] = Field(default_factory=list)
+    cons: List[Dict[str, Any]] = Field(default_factory=list)
+    reliability: float = 0.0
+    stance: str = ""
+    consensus_ratio: Optional[float] = None
+    """Ratio of supporting evidence (0.0–1.0). None when evidence pool is empty."""
+    consensus_label: Optional[str] = None
+    """Human-readable consensus label (e.g. 'Strong consensus', 'Contested — active scientific debate')."""
+
+
+# ============================================================================
 # TREE STRUCTURE MODELS (for new nested argument representation)
 # ============================================================================
 

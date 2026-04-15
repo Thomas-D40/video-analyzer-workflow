@@ -111,7 +111,8 @@ def generate_markdown_report(data: Dict) -> str:
             "reasoning_structure": "### 🌳 Structure de l'Argumentation",
             "sub_arguments": "**Arguments Supports**",
             "counter_arguments": "**Contre-Arguments**",
-            "evidence": "**Preuves/Exemples**"
+            "evidence": "**Preuves/Exemples**",
+            "consensus": "Consensus"
         }
     else:  # English
         strings = {
@@ -138,7 +139,8 @@ def generate_markdown_report(data: Dict) -> str:
             "reasoning_structure": "### 🌳 Reasoning Structure",
             "sub_arguments": "**Supporting Sub-Arguments**",
             "counter_arguments": "**Counter-Arguments**",
-            "evidence": "**Evidence/Examples**"
+            "evidence": "**Evidence/Examples**",
+            "consensus": "Consensus"
         }
     
     # En-tête du rapport
@@ -185,7 +187,19 @@ def generate_markdown_report(data: Dict) -> str:
                 rel_emoji = "🔴"
                 rel_text = strings["low"]
 
-            report.append(f"**{strings['reliability']}** : {rel_emoji} {rel_text} ({reliability:.1f}/1.0) | **{strings['position']}** : {stance}")
+            # Consensus indicator (optional — present only when evidence pool is non-empty)
+            consensus_label = arg.get("consensus_label")
+            consensus_ratio = arg.get("consensus_ratio")
+            if consensus_label and consensus_ratio is not None:
+                consensus_str = f" | **{strings['consensus']}** : {consensus_label} ({int(consensus_ratio * 100)}%)"
+            else:
+                consensus_str = ""
+
+            report.append(
+                f"**{strings['reliability']}** : {rel_emoji} {rel_text} ({reliability:.1f}/1.0)"
+                f"{consensus_str}"
+                f" | **{strings['position']}** : {stance}"
+            )
         report.append("")
         
         # Analyse Pros/Cons

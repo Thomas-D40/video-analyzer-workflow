@@ -24,6 +24,7 @@ from app.services.research import (
 )
 from app.agents.orchestration import (
     generate_search_queries,
+    generate_adversarial_queries,
     get_research_strategy,
 )
 from app.agents.enrichment import (
@@ -32,6 +33,8 @@ from app.agents.enrichment import (
     get_screening_stats,
 )
 from app.agents.analysis import extract_pros_cons
+from app.agents.analysis.consensus import compute_consensus
+from app.config import get_settings
 from app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -40,7 +43,8 @@ logger = get_logger(__name__)
 async def research_single_agent(
     agent_name: str,
     query: str,
-    max_results: int = 5
+    max_results: int = 5,
+    tag: str = "support"
 ) -> tuple[str, List[Dict], Exception | None]:
     """
     Execute research for a single agent asynchronously.
@@ -49,6 +53,7 @@ async def research_single_agent(
         agent_name: Name of the research agent
         query: Search query
         max_results: Maximum results to return
+        tag: Retrieval intent — "support" or "refutation" — stamped on each result
 
     Returns:
         Tuple of (agent_name, results, error)
@@ -57,7 +62,7 @@ async def research_single_agent(
         return (agent_name, [], None)
 
     try:
-        logger.debug("agent_search_start", agent=agent_name, query_preview=query[:50])
+        logger.debug("agent_search_start", agent=agent_name, query_preview=query[:50], tag=tag)
 
         # All research services are async — await directly
         agent_funcs = {
@@ -77,7 +82,11 @@ async def research_single_agent(
 
         results = await agent_funcs[agent_name]()
 
-        logger.debug("agent_search_end", agent=agent_name, results_count=len(results))
+        # Stamp each result with retrieval intent (stripped before LLM calls)
+        for result in results:
+            result["retrieved_for"] = tag
+
+        logger.debug("agent_search_end", agent=agent_name, results_count=len(results), tag=tag)
         return (agent_name, results, None)
 
     except Exception as e:
@@ -114,7 +123,9 @@ async def research_argument_parallel(
         selected_agents = ["semantic_scholar", "crossref"]
         categories = ["general"]
 
-    # Step 2: Generate optimized queries (sync OpenAI call → thread)
+    settings = get_settings()
+
+    # Step 2: Generate optimized support queries (sync OpenAI call → thread)
     try:
         queries = await asyncio.to_thread(
             generate_search_queries,
@@ -125,16 +136,41 @@ async def research_argument_parallel(
         logger.error("query_generation_failed", detail=str(e))
         queries = {}
 
-    # Step 3: Execute all agent searches in parallel
-    tasks = [
-        research_single_agent(agent_name, queries.get(agent_name, ""))
+    # Step 2b: Generate adversarial queries when enabled (sync OpenAI call → thread)
+    adversarial_queries: Dict[str, str] = {}
+    if settings.adversarial_queries_enabled:
+        try:
+            adversarial_queries = await asyncio.to_thread(
+                generate_adversarial_queries,
+                argument_en,
+                selected_agents
+            )
+            logger.debug(
+                "adversarial_queries_ready",
+                non_empty=sum(1 for q in adversarial_queries.values() if q)
+            )
+        except Exception as e:
+            logger.warning("adversarial_query_generation_failed", detail=str(e))
+            adversarial_queries = {}
+    else:
+        logger.debug("adversarial_queries_disabled")
+
+    # Step 3: Execute support + adversarial searches in parallel
+    support_tasks = [
+        research_single_agent(agent_name, queries.get(agent_name, ""), tag="support")
         for agent_name in selected_agents
         if queries.get(agent_name, "")
     ]
 
-    results = await asyncio.gather(*tasks, return_exceptions=False)
+    adversarial_tasks = [
+        research_single_agent(agent_name, adversarial_queries[agent_name], tag="refutation")
+        for agent_name in selected_agents
+        if adversarial_queries.get(agent_name, "")
+    ]
 
-    # Step 4: Collect all results
+    results = await asyncio.gather(*support_tasks, *adversarial_tasks, return_exceptions=False)
+
+    # Step 4: Collect all results (retrieved_for tag preserved)
     all_sources = []
     for agent_name, agent_results, error in results:
         if error:
@@ -224,22 +260,38 @@ async def research_argument_parallel(
             sources_by_type["statistical"].append(source)
 
     # Step 5: Pros/Cons Analysis (sync OpenAI call → thread)
+    # Strip retrieved_for tag so the LLM analyzes content without framing bias
+    sources_for_llm = [
+        {k: v for k, v in s.items() if k != "retrieved_for"}
+        for s in final_sources
+    ]
+
     try:
-        logger.info("pros_cons_start", sources_count=len(final_sources))
+        logger.info("pros_cons_start", sources_count=len(sources_for_llm))
         analysis = await asyncio.to_thread(
             extract_pros_cons,
             argument_en,
-            final_sources
+            sources_for_llm
         )
         logger.info("pros_cons_end", pros_count=len(analysis.get('pros', [])), cons_count=len(analysis.get('cons', [])))
     except Exception as e:
         logger.error("pros_cons_failed", detail=str(e))
         analysis = {"pros": [], "cons": []}
 
+    # Step 5b: Compute consensus indicator (pure Python, no LLM)
+    consensus = compute_consensus(analysis.get("pros", []), analysis.get("cons", []))
+    logger.debug(
+        "consensus_computed",
+        ratio=consensus["consensus_ratio"],
+        label=consensus["consensus_label"]
+    )
+
     enriched_arg = arg_data.copy()
     enriched_arg["categories"] = categories
     enriched_arg["sources"] = sources_by_type
     enriched_arg["analysis"] = analysis
+    enriched_arg["consensus_ratio"] = consensus["consensus_ratio"]
+    enriched_arg["consensus_label"] = consensus["consensus_label"]
 
     return enriched_arg
 

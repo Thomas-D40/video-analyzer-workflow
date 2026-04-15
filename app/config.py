@@ -50,6 +50,12 @@ class Settings(BaseSettings):
         description="Minimum relevance score (0.0-1.0) for full-text fetch"
     )
 
+    # Adversarial Query Generation
+    adversarial_queries_enabled: bool = Field(
+        default=True,
+        description="Enable adversarial query generation for unbiased dual-source retrieval"
+    )
+
     @property
     def api_keys_set(self) -> set[str]:
         return {k.strip() for k in self.allowed_api_keys.split(",") if k.strip()}

@@ -12,10 +12,12 @@ from .topic_classifier import (
     get_research_strategy,
     CATEGORY_AGENTS_MAP
 )
+from .adversarial_query import generate_adversarial_queries
 
 __all__ = [
     # Query generation
     "generate_search_queries",
+    "generate_adversarial_queries",
 
     # Topic classification
     "classify_argument_topic",
