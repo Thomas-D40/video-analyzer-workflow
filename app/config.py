@@ -1,6 +1,4 @@
-from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
 from functools import lru_cache
 
 
@@ -19,7 +17,7 @@ class Settings(BaseSettings):
     mongo_db_name: str = "video_analyzer"
 
     # OpenAI
-    openai_api_key: Optional[str] = None
+    openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     openai_smart_model: str = "gpt-4o"
 
@@ -28,33 +26,11 @@ class Settings(BaseSettings):
 
     # API Security
     allowed_api_keys: str = ""
-    admin_password: Optional[str] = None
+    admin_password: str = ""
 
-    # News & Fact-Check APIs
-    newsapi_key: Optional[str] = None
-    gnews_api_key: Optional[str] = None
-    google_factcheck_api_key: Optional[str] = None
-    claimbuster_api_key: Optional[str] = None
-
-    # Enrichment - Smart Full-Text Filtering
-    fulltext_screening_enabled: bool = Field(
-        default=True,
-        description="Enable relevance screening before full-text fetch"
-    )
-    fulltext_top_n: int = Field(
-        default=3,
-        description="Number of top sources to fetch full text for"
-    )
-    fulltext_min_score: float = Field(
-        default=0.6,
-        description="Minimum relevance score (0.0-1.0) for full-text fetch"
-    )
-
-    # Adversarial Query Generation
-    adversarial_queries_enabled: bool = Field(
-        default=True,
-        description="Enable adversarial query generation for unbiased dual-source retrieval"
-    )
+    # Evidence Engine
+    evidence_engine_url: str
+    evidence_engine_api_key: str
 
     @property
     def api_keys_set(self) -> set[str]:

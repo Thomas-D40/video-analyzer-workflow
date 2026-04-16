@@ -4,13 +4,11 @@
 
 ```
 app/
-├── agents/              # LLM-powered intelligence
-│   ├── extraction/      # Transcript → structured arguments
-│   ├── enrichment/      # Relevance screening & full-text fetching
-│   ├── orchestration/   # Topic classification & query optimization
-│   └── analysis/        # Pros/cons extraction & reliability scoring
+├── agents/
+│   └── extraction/      # Transcript → structured arguments (LLM-powered)
 ├── services/
-│   └── research/        # Pure API clients (no LLM)
+│   ├── evidence_engine.py  # HTTP client for evidence-engine POST /analyze
+│   └── storage.py          # MongoDB persistence
 ├── core/                # Workflow orchestration & auth
 ├── constants/           # Centralized constants (9 modules)
 ├── models/              # Pydantic data models
@@ -19,7 +17,9 @@ app/
 └── utils/               # YouTube, transcript, report, helpers
 ```
 
-**Key distinction**: Agents use the OpenAI API. Services are pure HTTP clients with no LLM calls. Query optimization happens in `orchestration/`, then pre-built queries are passed to services.
+**Role split**:
+- `video-analyzer-workflow` (this repo) — transcript extraction + argument extraction
+- `evidence-engine` (https://github.com/Thomas-D40/evidence-engine) — argument analysis (research, pros/cons, reliability scoring)
 
 ---
 
@@ -70,81 +70,47 @@ app/
 }
 ```
 
-### Orchestration (`app/agents/orchestration/`)
+---
 
-| File | Role |
-|------|------|
-| `topic_classifier.py` | GPT-4o-mini: classify argument domain, select research services |
-| `query_generator.py` | GPT-4o-mini: generate API-optimized queries with fallbacks and confidence score |
+## Evidence Engine (`app/services/evidence_engine.py`)
 
-**Category → services mapping**:
-```python
+HTTP client that delegates all per-argument analysis to the evidence-engine service.
+
+**Contract**: `POST {EVIDENCE_ENGINE_URL}/analyze`
+
+Request:
+```json
 {
-  "medicine":       ["pubmed", "europepmc", "semantic_scholar", "google_factcheck"],
-  "economics":      ["oecd", "world_bank", "semantic_scholar"],
-  "physics":        ["arxiv", "semantic_scholar", "core", "doaj"],
-  "current_events": ["newsapi", "gnews", "google_factcheck"],
-  "fact_check":     ["google_factcheck", "claimbuster"],
-  "general":        ["semantic_scholar", "crossref"]
+  "argument": "Coffee reduces liver cancer risk",
+  "mode": "simple",
+  "context": "Le café réduit les risques de cancer du foie",
+  "language": "fr"
 }
 ```
 
-### Enrichment (`app/agents/enrichment/`)
+Response:
+```json
+{
+  "pros": [{ "claim": "15% reduction in cancer risk", "source": "https://..." }],
+  "cons": [{ "claim": "No significant effect in meta-analysis", "source": "https://..." }],
+  "reliability_score": 0.75,
+  "consensus_ratio": 0.8,
+  "consensus_label": "Strong consensus"
+}
+```
 
-| File | Role |
-|------|------|
-| `screening.py` | GPT-4o-mini: score each source 0.0–1.0, return top N above threshold |
-| `fulltext.py` | Fetch full-text content from URLs (HTML/PDF) |
-| `common.py` | Shared cache and source type detection utilities |
+**Error handling**:
+- HTTP 4xx/5xx → propagated as `httpx.HTTPStatusError`
+- Timeout (> 120s) → propagated as `httpx.TimeoutException`
 
-**Mode config**:
-
-| Mode | Full-texts | Threshold |
-|------|-----------|-----------|
-| simple | 0 | — |
-| medium | 3 | 0.6 |
-| hard | 6 | 0.5 |
-
-### Analysis (`app/agents/analysis/`)
-
-| File | Role |
-|------|------|
-| `pros_cons.py` | GPT-4o-mini: extract supporting/contradicting evidence with citations |
-| `aggregate.py` | GPT-4o-mini: calculate reliability score 0.0–1.0 based on evidence balance |
-
----
-
-## Research Services (`app/services/research/`)
-
-Pure API clients. No LLM. All return `List[Dict]` with standardized fields: `title`, `url`, `snippet`, `source`, `year`, `authors`.
-
-| Domain | Service | Source |
-|--------|---------|--------|
-| Medical | `pubmed.py` | PubMed/NCBI — 39M+ biomedical citations |
-| Medical | `europepmc.py` | Europe PMC — better open access detection |
-| Scientific | `scientific.py` | ArXiv, CrossRef, DOAJ |
-| Scientific | `semantic_scholar.py` | Semantic Scholar — 200M+ papers, citation count |
-| Scientific | `core.py` | CORE — 350M+ open access papers |
-| Statistical | `statistical.py` | World Bank — development indicators (4-level fallback) |
-| Statistical | `oecd.py` | OECD — 100+ dataflows via SDMX API |
-| News | `news.py` | NewsAPI |
-| News | `gnews.py` | GNews |
-| Fact-check | `factcheck.py` | Google Fact Check Tools |
-| Fact-check | `claimbuster.py` | ClaimBuster — AI-powered claim scoring |
-
-**Adding a new service**:
-1. Create `app/services/research/<name>.py` — implement `search_X(query, max_results) -> List[Dict]`
-2. Add to `app/services/research/__init__.py`
-3. Add to `app/agents/__init__.py` for backward compatibility
-4. Update `CATEGORY_AGENTS_MAP` in `topic_classifier.py`
-5. Add query style to `query_generator.py`
+See https://github.com/Thomas-D40/evidence-engine for full API documentation.
 
 ---
 
 ## Database Schema
 
-**MongoDB database**: `video_analyzer`  
-**Collection**: `video_analyses`  
+**MongoDB database**: `video_analyzer`
+**Collection**: `video_analyses`
 **Primary key**: YouTube video ID
 
 ### Document structure
@@ -188,23 +154,20 @@ Pure API clients. No LLM. All return `List[Dict]` with standardized fields: `tit
     "metadata": { "total_chains": 3, "total_arguments": 15 }
   },
 
-  "enriched_thesis_arguments": [   // Research + analysis added to thesis nodes
+  "enriched_thesis_arguments": [   // Evidence-engine analysis added to thesis nodes
     {
       "argument": String,
       "argument_en": String,
       "stance": "affirmatif" | "conditionnel",
       "confidence": Float,
       "chain_id": Integer,
-      "sources": {
-        "scientific": [...],
-        "medical": [...],
-        "statistical": [...]
-      },
       "analysis": {
         "pros": [{ "claim": String, "source": String }],
         "cons": [{ "claim": String, "source": String }]
       },
-      "reliability_score": Float    // 0.0–1.0
+      "reliability_score": Float,    // 0.0–1.0
+      "consensus_ratio": Float,      // 0.0–1.0
+      "consensus_label": String
     }
   ],
 
@@ -241,14 +204,11 @@ await submit_rating(video_id="dQw4w9WgXcQ", analysis_mode=AnalysisMode.SIMPLE, r
 
 ## Error Handling
 
-**Graceful degradation strategy**:
-- Missing API key → skip service, continue with others
-- API error → log, return `[]`
-- LLM failure → retry with exponential backoff (3 attempts: 1s → 2s → 4s)
-- No sources found → continue analysis with warning
-- Parse error → use fallback values
+**Evidence-engine errors**:
+- HTTP 4xx/5xx → propagated to video-analyzer caller
+- Timeout (> 120s) → HTTP 504 to caller
+- One argument fails → entire video analysis fails (no partial saves)
 
-**Error types** (`app/utils/api_helpers.py`):
-- `TransientAPIError` → retry
-- `PermanentAPIError` → fail immediately
-- `RateLimitError` → wait and retry
+**Extraction errors**:
+- LLM failure → retry with exponential backoff (3 attempts: 1s → 2s → 4s)
+- No arguments found → return empty analysis with message

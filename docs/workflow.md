@@ -2,8 +2,7 @@
 
 End-to-end pipeline for analyzing a YouTube video.
 
-**Entry point**: `app/core/workflow.py` → `process_video()`  
-**Parallel execution**: `app/core/parallel_research.py`
+**Entry point**: `app/core/workflow.py` → `process_video()`
 
 ---
 
@@ -18,14 +17,11 @@ Phase 1 — Transcript extraction
   ↓
 Phase 2 — Argument extraction (7-step pipeline)
   ↓
-Phase 3 — Per argument (parallel across all arguments):
-  ├─ Topic classification → select research services
-  ├─ Query generation → optimized query per service
-  ├─ Parallel research → 13 services
-  ├─ Relevance screening → top N sources
-  ├─ Full-text fetch (medium/hard only)
-  ├─ Pros/cons extraction
-  └─ Reliability scoring + consensus
+Phase 3 — Evidence Engine (delegated)
+  POST https://evidence-engine.../analyze
+  Input:  argument_en + mode + context + language
+  Output: pros, cons, reliability_score, consensus_ratio, consensus_label
+  Handled entirely by evidence-engine — see https://github.com/Thomas-D40/evidence-engine
   ↓
 Phase 4 — Report generation (Markdown)
   ↓
@@ -127,116 +123,33 @@ TRANSLATION_MODEL   = "gpt-4o-mini"
 
 ---
 
-## Phase 3 — Per-Argument Research & Analysis
+## Phase 3 — Evidence Engine (delegated)
 
-**Location**: `app/core/parallel_research.py`
+**Location**: `app/services/evidence_engine.py`
 
-All arguments are processed in parallel via `asyncio.gather()`. For each argument:
-
-### 3.1 Topic Classification
-
-**File**: `app/agents/orchestration/topic_classifier.py` — GPT-4o-mini
-
-Returns 1–3 categories and the list of research services to call:
+Each thesis argument is sent to `POST {EVIDENCE_ENGINE_URL}/analyze`. Arguments are processed sequentially.
 
 ```python
-strategy = get_research_strategy(argument_en)
-# → {"categories": ["medicine"], "agents": ["pubmed", "europepmc", "semantic_scholar"]}
-```
-
-### 3.2 Query Generation
-
-**File**: `app/agents/orchestration/query_generator.py` — GPT-4o-mini
-
-Generates one optimized query per selected service:
-
-```python
-queries = generate_search_queries(argument_en, selected_agents)
-# → {"pubmed": "coffee liver cancer risk epidemiology", "oecd": "GDP growth"}
-```
-
-Each query includes `fallback` alternatives and a `confidence` score.
-
-**API-specific styles**:
-- PubMed: Medical terminology, MeSH terms
-- ArXiv: Academic/technical terms
-- OECD: Standard indicator names (GDP, unemployment...)
-- NewsAPI: News keywords
-- Google Fact Check: Full claim sentence
-
-### 3.3 Parallel Research
-
-**Files**: `app/services/research/*.py`
-
-All service calls execute concurrently. Each returns `List[Dict]` with:
-
-```python
-{
-  "title": "Study title",
-  "url": "https://...",
-  "snippet": "Abstract or description",
-  "source": "PubMed",
-  "year": 2023,
-  "access_type": "open_access"
-}
-```
-
-Services return `[]` if API key is missing or call fails — no crash.
-
-### 3.4 Relevance Screening
-
-**File**: `app/agents/enrichment/screening.py` — GPT-4o-mini
-
-Scores all retrieved sources (0.0–1.0) and selects the top N above threshold:
-
-```python
-selected, rejected = screen_sources_by_relevance(
-    argument_en, all_sources, top_n=3, min_score=0.6
+result = await evidence_engine_analyze(
+    argument=arg["argument"],
+    argument_en=arg["argument_en"],
+    mode=analysis_mode.value,  # "simple" | "medium" | "hard"
+    language=language,
 )
 ```
 
-### 3.5 Full-Text Fetching (medium/hard only)
-
-**File**: `app/agents/enrichment/fulltext.py`
-
-Fetches complete article content (HTML/PDF) for the selected top sources. Abstract-only sources remain valid and are not penalized.
-
-### 3.6 Pros/Cons Extraction
-
-**File**: `app/agents/analysis/pros_cons.py` — GPT-4o-mini
-
-Analyzes sources and extracts supporting and contradicting evidence with citations:
-
-```python
+**Response per argument**:
+```json
 {
-  "pros": [{"claim": "15% reduction in cancer risk", "source": "https://..."}],
-  "cons": [{"claim": "No significant effect in meta-analysis", "source": "https://..."}]
+  "pros": [{ "claim": "...", "source": "https://..." }],
+  "cons": [{ "claim": "...", "source": "https://..." }],
+  "reliability_score": 0.75,
+  "consensus_ratio": 0.8,
+  "consensus_label": "Strong consensus"
 }
 ```
 
-**Rules enforced in prompt**:
-- Each claim must be explicitly supported by a provided source
-- No invented evidence
-- Each claim must cite the source URL
-
-### 3.7 Reliability Scoring
-
-**File**: `app/agents/analysis/aggregate.py` — GPT-4o-mini
-
-Calculates a reliability score (0.0–1.0) per argument based on:
-- Number and diversity of sources
-- Evidence balance (pros vs cons ratio)
-- Argument stance (affirmatif vs conditionnel)
-- Source quality (scientific > general)
-
-**Score ranges**:
-
-| Score | Meaning |
-|-------|---------|
-| 0.0–0.3 | Very low — few sources, major contradictions |
-| 0.4–0.6 | Average — partial consensus |
-| 0.7–0.8 | Good — several reliable sources |
-| 0.9–1.0 | Very high — strong scientific consensus |
+Research depth (simple/medium/hard) is controlled by the `mode` parameter passed to evidence-engine. See https://github.com/Thomas-D40/evidence-engine for details.
 
 ---
 
@@ -246,7 +159,7 @@ Calculates a reliability score (0.0–1.0) per argument based on:
 
 Generates a Markdown report with:
 - Video info
-- For each argument: reliability score, supporting evidence, contradicting evidence, sources
+- For each argument: reliability score, consensus label, supporting evidence, contradicting evidence
 
 ---
 
@@ -263,27 +176,19 @@ Saves to MongoDB collection `video_analyses`. The document stores all three anal
 | Agent | Model | Purpose |
 |-------|-------|---------|
 | `local_extractor.py` | GPT-4o | Extract arguments from transcript |
-| `topic_classifier.py` | GPT-4o-mini | Classify domain |
-| `query_generator.py` | GPT-4o-mini | Optimize search queries |
-| `screening.py` | GPT-4o-mini | Score source relevance |
-| `pros_cons.py` | GPT-4o-mini | Extract evidence |
-| `aggregate.py` | GPT-4o-mini | Calculate reliability score |
+| `validators.py` | GPT-4o-mini | Filter non-substantive arguments |
+| `translator.py` | GPT-4o-mini | Translate to English |
+| `hierarchy.py` | GPT-4o-mini | Classify argument roles |
+
+All research, screening, pros/cons, and reliability LLM calls happen inside evidence-engine.
 
 ---
 
-## Cost Estimates
+## Cost Estimates (video-analyzer only)
 
-| Mode | Cost/argument | Full-texts | Screening threshold |
-|------|--------------|-----------|-------------------|
-| simple | ~$0.01 | 0 | — |
-| medium | ~$0.46 | 3 | 0.6 |
-| hard | ~$0.70 | 6 | 0.5 |
+video-analyzer now only pays for argument extraction (GPT-4o segments). Evidence-engine analysis costs are billed separately on that service.
 
----
-
-## Known Limitations
-
-1. **Confirmation bias** — only supporting queries generated (addressed in Plan A: adversarial queries)
-2. **Flat source weighting** — preprint = peer-reviewed (addressed in Plan B: source tier scoring)
-3. **No recency signal** — doesn't flag when recent research contradicts older claims (Plan B)
-4. **No consensus indicator** — can't distinguish settled science from controversy (Plan A: consensus service)
+| Component | Model | Approx. cost |
+|-----------|-------|-------------|
+| Segmentation + extraction | GPT-4o | ~$0.02–0.10/video |
+| Validation + translation + hierarchy | GPT-4o-mini | ~$0.01/video |
