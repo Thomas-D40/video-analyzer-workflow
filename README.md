@@ -1,213 +1,108 @@
 # Video Analyzer Workflow
 
-API HTTP pour analyser des vidéos YouTube via un workflow d'agents.
+HTTP API for analyzing YouTube videos via an agent-based workflow.
+
+## Services
+
+| Repo | Responsibility |
+|------|---------------|
+| `video-analyzer-workflow` (this repo) | Transcript extraction + argument extraction |
+| [`evidence-engine`](https://github.com/Thomas-D40/evidence-engine) | Argument analysis backend (research, pros/cons, reliability scoring) |
 
 ## Stack
 
 - FastAPI (API)
+- MongoDB + Motor (async driver)
+- yt-dlp / ffmpeg (video ingest fallback)
+- httpx (HTTP client for evidence-engine)
 
-- MongoDB (stockage)
-- Motor (driver async)
-- yt-dlp / ffmpeg (ingest vidéo au besoin)
+## Quick Start
 
-## Démarrage rapide
-
-### 1. Créer le fichier `.env`
-
-Créez un fichier `.env` à la racine du projet avec le contenu suivant:
+### 1. Create `.env`
 
 ```env
 DATABASE_URL=mongodb://mongo:27017
-OPENAI_API_KEY=votre_clé_openai_ici
+OPENAI_API_KEY=sk-...
 ENV=development
-
-# Optional: News & Fact-Check APIs
-NEWSAPI_KEY=votre_clé_newsapi
-GNEWS_API_KEY=votre_clé_gnews
-GOOGLE_FACTCHECK_API_KEY=votre_clé_google
-CLAIMBUSTER_API_KEY=votre_clé_claimbuster
+EVIDENCE_ENGINE_URL=https://evidence-engine.yourdomain.com
+EVIDENCE_ENGINE_API_KEY=your-api-key-here
 ```
 
-**Note importante**:
-
-- `OPENAI_API_KEY` est **requis** pour l'extraction d'arguments
-- Les autres clés sont optionnelles (services sautés si non configurés)
-
-### 2. Lancer les services Docker
+### 2. Start Docker services
 
 ```bash
 docker compose up -d --build
 ```
 
-Cela va démarrer:
-
-- L'API FastAPI sur le port 8000
-- MongoDB (base de données)
-
-### 3. Vérifier que tout fonctionne
-
-Vérifier les logs:
+### 3. Verify
 
 ```bash
 docker compose logs -f api
-```
-
-Ou vérifier que l'API répond:
-
-```bash
 curl http://localhost:8000/docs
 ```
 
-### 4. Tester l'endpoint d'analyse
+### 4. Analyze a video
 
 ```bash
-curl -X POST http://localhost:8000/analyze \
+curl -X POST http://localhost:8000/api/analyze \
   -H "Content-Type: application/json" \
   -d '{"youtube_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
 ```
 
-Réponse attendue:
-
-- Si première analyse: `{"video_id": "...", "status": "queued", "result": null}`
-- Si déjà analysé: `{"video_id": "...", "status": "completed", "result": {"arguments": [...]}}`
-
-### 5. Tester les services de recherche
-
-```bash
-# Test all research APIs
-python tests/test_research_services.py
-
-# Test specific category
-python tests/test_research_services.py --category news
-python tests/test_research_services.py --category factcheck
-
-# Verbose output
-python tests/test_research_services.py -v
-```
-
-See `tests/README.md` for details.
-
 ## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md) — Package structure, agents, research services, database schema
-- [`docs/workflow.md`](docs/workflow.md) — End-to-end pipeline, argument extraction, analysis phases
-- [`docs/setup.md`](docs/setup.md) — Optional API keys setup and troubleshooting
-
-## Configuration
-
-- Variables dans `.env` (voir `.env.example`):
-  - `DATABASE_URL`
-  - `OPENAI_API_KEY` (ou autre LLM provider)
+- [`docs/architecture.md`](docs/architecture.md) — Package structure, evidence-engine contract, database schema
+- [`docs/workflow.md`](docs/workflow.md) — End-to-end pipeline, argument extraction, evidence-engine delegation
+- [`docs/setup.md`](docs/setup.md) — Environment variables and troubleshooting
 
 ## Workflow Diagram
 
 ```mermaid
 graph TD
     Start([YouTube Video URL]) --> VideoID[Extract Video ID]
-    VideoID --> CacheCheck{Check MongoDB<br/>Cache}
+    VideoID --> CacheCheck{Check MongoDB Cache}
 
-    CacheCheck -->|Found & !force_refresh| Return([Return Cached<br/>Analysis])
+    CacheCheck -->|Found & !force_refresh| Return([Return Cached Analysis])
     CacheCheck -->|Not Found| Extract[Extract Transcript]
 
-    Extract --> Arguments[Extract Arguments<br/>GPT-4o]
+    Extract --> Arguments[Extract Arguments\nGPT-4o pipeline]
 
-    Arguments --> Loop{For Each<br/>Argument}
+    Arguments --> Loop{For Each\nThesis Argument}
 
-    Loop --> Classify[Topic Classifier<br/>GPT-4o-mini]
-    Classify --> QueryGen["Generate Support + Refutation Queries ★<br/>GPT-4o-mini"]
+    Loop --> EvidenceEngine["Call evidence-engine\nPOST /analyze\n(mode: simple | medium | hard)"]
 
-    QueryGen --> Strategy{Select<br/>Sources}
-
-    Strategy -->|Medicine| MedSearch[PubMed<br/>Europe PMC<br/>Fact-Check]
-    Strategy -->|Economics| EconSearch[OECD<br/>World Bank<br/>Semantic Scholar]
-    Strategy -->|Physics/CS| SciSearch[ArXiv<br/>CORE<br/>DOAJ]
-    Strategy -->|Current Events| NewsSearch[NewsAPI<br/>GNews]
-    Strategy -->|Fact-Check| FactSearch[Google Fact Check<br/>ClaimBuster]
-    Strategy -->|General| GenSearch[Semantic Scholar<br/>CrossRef]
-
-    MedSearch --> SearchParallel[Execute Searches<br/>in Parallel]
-    EconSearch --> SearchParallel
-    SciSearch --> SearchParallel
-    NewsSearch --> SearchParallel
-    FactSearch --> SearchParallel
-    GenSearch --> SearchParallel
-
-    SearchParallel --> TagSources["Tag Sources ★<br/>retrieved_for = support | refutation"]
-    TagSources --> Screening[Relevance Screening<br/>GPT-4o-mini]
-    Screening --> TopN{Select Top N<br/>Sources}
-
-    TopN -->|High Relevance| Fulltext[Fetch Full Text<br/>httpx async]
-    TopN -->|Low Relevance| Abstract[Use Abstract Only]
-
-    Fulltext --> StripTag["Strip retrieved_for Tag ★<br/>prevent LLM framing bias"]
-    Abstract --> StripTag
-
-    StripTag --> Analysis[Extract Pros & Cons<br/>GPT-4o-mini]
-
-    Analysis --> Aggregate[Calculate Reliability Score<br/>Evidence Balance]
-    Aggregate --> Consensus["Consensus Indicator ★<br/>pure Python — no LLM"]
-
-    Consensus --> LoopEnd{More<br/>Arguments?}
+    EvidenceEngine --> LoopEnd{More Arguments?}
     LoopEnd -->|Yes| Loop
     LoopEnd -->|No| Report[Generate Report]
 
     Report --> SaveCache[(Save to MongoDB)]
-    SaveCache --> End([Return New<br/>Analysis])
+    SaveCache --> End([Return Analysis])
 
-    %% ★ = planned — adversarial query architecture (Plan A)
-
-    %% Styling
     style CacheCheck fill:#fff4e1
     style Arguments fill:#ffe1e1
-    style Classify fill:#e1f5ff
-    style QueryGen fill:#e1f5ff
-    style TagSources fill:#f3e8ff
-    style StripTag fill:#f3e8ff
-    style Screening fill:#e1f5ff
-    style Analysis fill:#ffe1e1
-    style Aggregate fill:#fff4e1
-    style Consensus fill:#f3e8ff
+    style EvidenceEngine fill:#e1f5ff
     style Return fill:#e8f5e9
     style End fill:#e8f5e9
 ```
 
-> **★ = planned** — adversarial query architecture (Plan A): dual support/refutation queries, source tagging, and deterministic consensus indicator. Not yet implemented.
 ### Workflow Components
 
 **0. Cache Check** (MongoDB)
 - Extract video ID from URL
 - Check MongoDB for existing analysis
 - Return cached result if found (unless `force_refresh=true`)
-- Skip to end if cache hit (saves time & API costs)
 
-**1. Extraction** (GPT-4o)
+**1. Extraction** (GPT-4o pipeline)
 - Extract transcript from YouTube video
 - Identify substantive arguments with stance detection
+- Produce hierarchical `ArgumentStructure` (thesis → sub-arguments → evidence)
 
-**2. Orchestration** (GPT-4o-mini)
-- Classify argument topic (medicine, economics, news, etc.)
-- Generate optimized queries for each research API
-- Select appropriate sources based on topic
+**2. Evidence Engine** (HTTP delegation)
+- For each thesis argument: `POST {EVIDENCE_ENGINE_URL}/analyze`
+- Returns: `pros`, `cons`, `reliability_score`, `consensus_ratio`, `consensus_label`
+- Analysis depth controlled by `mode` parameter (simple/medium/hard)
 
-**3. Research** (API Clients)
-- Execute parallel searches across 13+ sources:
-  - **Medical**: PubMed, Europe PMC
-  - **Scientific**: ArXiv, CORE, DOAJ, Semantic Scholar
-  - **Economic**: OECD, World Bank
-  - **News**: NewsAPI, GNews
-  - **Fact-Check**: Google Fact Check, ClaimBuster
-
-**4. Enrichment** (GPT-4o-mini)
-- Screen sources by relevance (top N selection)
-- Fetch full text for high-relevance sources
-- Use abstracts only for low-relevance sources
-
-**5. Analysis** (GPT-4o-mini)
-- Extract supporting evidence (pros)
-- Extract contradicting evidence (cons)
-- Calculate reliability score (0.0-1.0)
-
-**6. Output**
+**3. Output**
 - Generate Markdown report
 - Save to MongoDB
 - Return complete analysis

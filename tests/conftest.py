@@ -6,6 +6,8 @@ import os
 # Set required env vars before any app imports to avoid pydantic-settings validation errors
 os.environ.setdefault("DATABASE_URL", "mongodb://localhost:27017")
 os.environ.setdefault("OPENAI_API_KEY", "")
+os.environ.setdefault("EVIDENCE_ENGINE_URL", "http://localhost:8001")
+os.environ.setdefault("EVIDENCE_ENGINE_API_KEY", "test-key")
 
 import pytest
 from unittest.mock import MagicMock
