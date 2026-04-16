@@ -114,7 +114,7 @@ graph TD
     Arguments --> Loop{For Each<br/>Argument}
 
     Loop --> Classify[Topic Classifier<br/>GPT-4o-mini]
-    Classify --> QueryGen[Generate Optimized Queries<br/>GPT-4o-mini]
+    Classify --> QueryGen["Generate Support + Refutation Queries ★<br/>GPT-4o-mini"]
 
     QueryGen --> Strategy{Select<br/>Sources}
 
@@ -132,35 +132,46 @@ graph TD
     FactSearch --> SearchParallel
     GenSearch --> SearchParallel
 
-    SearchParallel --> Screening[Relevance Screening<br/>GPT-4o-mini]
+    SearchParallel --> TagSources["Tag Sources ★<br/>retrieved_for = support | refutation"]
+    TagSources --> Screening[Relevance Screening<br/>GPT-4o-mini]
     Screening --> TopN{Select Top N<br/>Sources}
 
-    TopN -->|High Relevance| Fulltext[Fetch Full Text<br/>MCP/Web]
+    TopN -->|High Relevance| Fulltext[Fetch Full Text<br/>httpx async]
     TopN -->|Low Relevance| Abstract[Use Abstract Only]
 
-    Fulltext --> Analysis[Extract Pros & Cons<br/>GPT-4o-mini]
-    Abstract --> Analysis
+    Fulltext --> StripTag["Strip retrieved_for Tag ★<br/>prevent LLM framing bias"]
+    Abstract --> StripTag
+
+    StripTag --> Analysis[Extract Pros & Cons<br/>GPT-4o-mini]
 
     Analysis --> Aggregate[Calculate Reliability Score<br/>Evidence Balance]
+    Aggregate --> Consensus["Consensus Indicator ★<br/>pure Python — no LLM"]
 
-    Aggregate --> LoopEnd{More<br/>Arguments?}
+    Consensus --> LoopEnd{More<br/>Arguments?}
     LoopEnd -->|Yes| Loop
     LoopEnd -->|No| Report[Generate Report]
 
     Report --> SaveCache[(Save to MongoDB)]
     SaveCache --> End([Return New<br/>Analysis])
 
+    %% ★ = planned — adversarial query architecture (Plan A)
+
     %% Styling
     style CacheCheck fill:#fff4e1
     style Arguments fill:#ffe1e1
     style Classify fill:#e1f5ff
     style QueryGen fill:#e1f5ff
+    style TagSources fill:#f3e8ff
+    style StripTag fill:#f3e8ff
     style Screening fill:#e1f5ff
     style Analysis fill:#ffe1e1
     style Aggregate fill:#fff4e1
+    style Consensus fill:#f3e8ff
     style Return fill:#e8f5e9
     style End fill:#e8f5e9
 ```
+
+> **★ = planned** — adversarial query architecture (Plan A): dual support/refutation queries, source tagging, and deterministic consensus indicator. Not yet implemented.
 ### Workflow Components
 
 **0. Cache Check** (MongoDB)
